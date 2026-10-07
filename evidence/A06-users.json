@@ -1,0 +1,20 @@
+{
+  "runId": "a0ef9f92",
+  "commit": "48176a1",
+  "date": "2026-10-07T18:32:52.561Z",
+  "environment": "node v24.19.0 on linux",
+  "network": "walrus memory mainnet",
+  "serverUrl": "https://relayer.memory.walrus.xyz",
+  "communityKey": "c1",
+  "source": "real consented members only; no seeded or demo data",
+  "threshold": {
+    "minMembers": 3,
+    "minMemoriesEach": 10
+  },
+  "membersWithAnyMemory": 0,
+  "membersMeetingThreshold": 0,
+  "distinctDaysAcross": [],
+  "undecodableLines": 0,
+  "met": false,
+  "members": []
+}

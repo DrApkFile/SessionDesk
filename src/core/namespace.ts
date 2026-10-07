@@ -2,6 +2,9 @@ import { createHmac } from "node:crypto";
 
 export const MEMBER_HASH_HEX_CHARS = 24;
 
+export const NAMESPACE_KINDS = ["member", "items", "themes", "notes", "other"] as const;
+export type NamespaceKind = (typeof NAMESPACE_KINDS)[number];
+
 export type NamespaceRef =
   | { readonly kind: "member"; readonly memberH: string }
   | { readonly kind: "items" }
@@ -26,4 +29,12 @@ export function memberHashFromNamespace(communityKey: string, namespace: string)
   if (!namespace.startsWith(prefix)) return null;
   const rest = namespace.slice(prefix.length);
   return /^[0-9a-f]{24}$/.test(rest) ? rest : null;
+}
+
+export function namespaceKindOf(namespace: string): NamespaceKind {
+  if (namespace.includes("-m-")) return "member";
+  for (const kind of ["items", "themes", "notes"] as const) {
+    if (namespace.endsWith(`-${kind}`)) return kind;
+  }
+  return "other";
 }

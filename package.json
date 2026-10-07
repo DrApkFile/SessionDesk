@@ -3,8 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
+    "start": "tsx src/main.ts",
     "dev": "tsx --env-file=.env src/main.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run tests/unit tests/adversarial",
@@ -19,12 +22,12 @@
     "@mysten/seal": "1.4.19",
     "@mysten/sui": "2.35.0",
     "grammy": "1.46.0",
+    "tsx": "4.23.15",
     "zod": "4.6.5"
   },
   "devDependencies": {
     "@types/node": "26.6.4",
     "fast-check": "4.10.2",
-    "tsx": "4.23.15",
     "typescript": "7.0.2",
     "vitest": "5.0.3"
   }

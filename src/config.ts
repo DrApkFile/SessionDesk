@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DEFAULT_PORT } from "./core/tuning.js";
 
 const CONFIG_KEYS = [
   "MEMWAL_SERVER_URL",
@@ -17,6 +18,7 @@ const CONFIG_KEYS = [
   "GEMINI_FALLBACK_MODEL",
   "GROQ_API_KEY",
   "GROQ_MODEL",
+  "PORT",
 ] as const;
 
 const PLACEHOLDER_SECRET = "generate-with: openssl rand -hex 32";
@@ -48,6 +50,7 @@ const EnvSchema = z
     GEMINI_FALLBACK_MODEL: z.string().min(1),
     GROQ_API_KEY: z.string().min(10),
     GROQ_MODEL: z.string().min(1),
+    PORT: z.coerce.number().int().min(1).max(65_535).default(DEFAULT_PORT),
   })
   .strict();
 
@@ -66,6 +69,7 @@ export interface Config {
   readonly community: { readonly key: string; readonly namespaceSecret: string };
   readonly gemini: { readonly apiKey: string; readonly model: string; readonly fallbackModel: string };
   readonly groq: { readonly apiKey: string; readonly model: string };
+  readonly port: number;
 }
 
 export type ConfigLoad = { readonly ok: true; readonly config: Config } | { readonly ok: false; readonly problems: readonly string[] };
@@ -98,6 +102,7 @@ export function loadConfig(env: Readonly<Record<string, string | undefined>>): C
       community: { key: values.COMMUNITY_KEY, namespaceSecret: values.NAMESPACE_SECRET },
       gemini: { apiKey: values.GEMINI_API_KEY, model: values.GEMINI_MODEL, fallbackModel: values.GEMINI_FALLBACK_MODEL },
       groq: { apiKey: values.GROQ_API_KEY, model: values.GROQ_MODEL },
+      port: values.PORT,
     },
   };
 }
@@ -117,5 +122,6 @@ export function configSummary(config: Config): Record<string, string | number> {
     geminiModel: config.gemini.model,
     geminiFallbackModel: config.gemini.fallbackModel,
     groqModel: config.groq.model,
+    port: config.port,
   };
 }

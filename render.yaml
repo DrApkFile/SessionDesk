@@ -1,0 +1,44 @@
+services:
+  - type: web
+    name: sessiondesk
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: npm ci --include=dev
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: MEMWAL_SERVER_URL
+        value: https://relayer.memory.walrus.xyz
+      - key: COMMUNITY_KEY
+        sync: false
+      - key: COMMUNITY_CHAT_ID
+        sync: false
+      - key: NAMESPACE_SECRET
+        sync: false
+      - key: MANAGER_TELEGRAM_IDS
+        sync: false
+      - key: MEMWAL_A_ACCOUNT_ID
+        sync: false
+      - key: MEMWAL_A_PRIVATE_KEY
+        sync: false
+      - key: MEMWAL_B_ACCOUNT_ID
+        sync: false
+      - key: MEMWAL_B_PRIVATE_KEY
+        sync: false
+      - key: TELEGRAM_MEMBER_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_MANAGER_BOT_TOKEN
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3.8-flash
+      - key: GEMINI_FALLBACK_MODEL
+        value: gemini-3.5-flash
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: qwen/qwen3.8-27b

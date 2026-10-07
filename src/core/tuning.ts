@@ -35,3 +35,9 @@ export const GEMINI_RETRY_WINDOW_MINUTES = 5;
 export const PENDING_RETRY_BACKOFF_MS = [15_000, 30_000, 60_000, 120_000, 300_000] as const;
 export const PENDING_MAX_ATTEMPTS = 8;
 export const PENDING_BUFFER_LIMIT = 200;
+
+export const CONFLICT_BACKOFF_MS = [5_000, 15_000, 30_000, 60_000] as const;
+export const POLLING_RESTART_BACKOFF_MS = 10_000;
+export const SHUTDOWN_DRAIN_SECONDS = 25;
+export const DRAIN_POLL_MS = 500;
+export const DEFAULT_PORT = 3000;

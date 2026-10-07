@@ -1,7 +1,10 @@
+import type { Bot } from "grammy";
 import { configSummary, loadConfig } from "./config.js";
 import { BudgetGovernor } from "./core/budget.js";
+import { namespaceKindOf } from "./core/namespace.js";
 import { realSleep, systemClock } from "./core/ports.js";
 import { SeqAllocator } from "./core/seq.js";
+import { SHUTDOWN_DRAIN_SECONDS } from "./core/tuning.js";
 import { describeBoot, rebuildFromWalrus } from "./memory/boot.js";
 import { LedgerCache } from "./memory/cache.js";
 import { MemwalAdapter } from "./memory/memwalAdapter.js";
@@ -23,6 +26,9 @@ import { ManagerService } from "./bots/manager/service.js";
 import { buildManagerBot } from "./bots/manager/telegram.js";
 import { MemberDirectory } from "./bots/shared/directory.js";
 import { NamespaceRouter } from "./memory/router.js";
+import { PollingSupervisor, type Pollable } from "./bots/shared/polling.js";
+import type { LastWrite } from "./server/healthReport.js";
+import { startHealthServer } from "./server/httpServer.js";
 
 const log = new Log("sessiondesk");
 
@@ -69,18 +75,28 @@ log.say("notes_boot_done", { summary: describeBoot(bootedNotes.value), account: 
 
 
 const seqStart = Math.max(booted.value.nextSeq, bootedNotes.value.nextSeq);
-const queue = new WriteQueue(memory, realSleep, (job) => {
-  const target = job.namespace === notes.namespace ? notesCache : cache;
-  if (job.state === "saved" && job.blobId !== null) {
-    target.markSaved(job.seq, job.namespace, job.blobId);
-    log.say("write_saved", { seq: job.seq, namespace: job.namespace, blobId: job.blobId });
-    return;
-  }
-  if (job.state === "failed" && job.code !== null) {
-    target.markFailed(job.seq, job.namespace, job.code);
-    log.say("write_failed", { seq: job.seq, namespace: job.namespace, code: job.code, attempts: job.attempts });
-  }
-});
+const bootedAt = new Date().toISOString();
+let lastWrite: LastWrite | null = null;
+
+const queue = new WriteQueue(
+  memory,
+  realSleep,
+  (job) => {
+    const target = job.namespace === notes.namespace ? notesCache : cache;
+    if (job.state === "saved" && job.blobId !== null) {
+      target.markSaved(job.seq, job.namespace, job.blobId);
+      lastWrite = { at: new Date().toISOString(), state: "saved", namespaceKind: namespaceKindOf(job.namespace), code: null };
+      log.say("write_saved", { seq: job.seq, namespace: job.namespace, blobId: job.blobId });
+      return;
+    }
+    if (job.state === "failed" && job.code !== null) {
+      target.markFailed(job.seq, job.namespace, job.code);
+      lastWrite = { at: new Date().toISOString(), state: "failed", namespaceKind: namespaceKindOf(job.namespace), code: job.code };
+      log.say("write_failed", { seq: job.seq, namespace: job.namespace, code: job.code, attempts: job.attempts });
+    }
+  },
+  systemClock,
+);
 
 const seq = new SeqAllocator(seqStart);
 const pipeline = new EventPipeline(seq, (namespace) => (namespace === notes.namespace ? notesCache : cache), queue, config.community.key);
@@ -165,20 +181,73 @@ if (group.id !== config.telegram.communityChatId) {
   process.exit(1);
 }
 
+function pollable(name: string, bot: Bot): Pollable {
+  return {
+    name,
+    start: (onPolling) =>
+      bot.start({
+        onStart: (me) => {
+          log.say("polling", { bot: name, username: me.username });
+          onPolling();
+        },
+      }),
+    stop: () => bot.stop(),
+  };
+}
+
+const supervisors = [
+  new PollingSupervisor(pollable("member", memberBot.bot), realSleep, systemClock, log.child("member")),
+  new PollingSupervisor(pollable("manager", managerBot.bot), realSleep, systemClock, log.child("manager")),
+];
+
+const server = startHealthServer(
+  config.port,
+  () => ({
+    bootOk: booted.ok && bootedNotes.ok,
+    bootComplete: booted.value.complete,
+    bootedAt,
+    bootSummary: describeBoot(booted.value),
+    bots: supervisors.map((supervisor, index) => ({
+      name: index === 0 ? "member" : "manager",
+      polling: supervisor.polling(),
+      state: supervisor.state(),
+      conflicts: supervisor.conflicts(),
+      pollingSince: supervisor.pollingSince(),
+    })),
+    queue: { ...queue.counts(), depth: queue.depth(), paused: queue.paused(), closed: queue.closed() },
+    lastWrite,
+    unclassifiedHeld: pending.waiting(),
+    unclassifiedDropped: pending.dropped(),
+    memory: health.summary(),
+    now: new Date(),
+  }),
+  log.child("http"),
+);
+
+let stopping = false;
 async function stop(signal: string): Promise<void> {
+  if (stopping) return;
+  stopping = true;
   log.say("stopping", { signal, queue: queue.depth(), unclassifiedHeld: pending.waiting() });
-  await memberBot.bot.stop();
-  await managerBot.bot.stop();
-  await queue.settled();
-  if (pending.waiting() > 0) {
-    log.say("unclassified_lost", { count: pending.waiting(), stored: false, note: "held in memory only, never written to Walrus" });
-  }
+  await Promise.all(supervisors.map((supervisor) => supervisor.stop()));
+  queue.close();
+  const drained = await queue.drain(SHUTDOWN_DRAIN_SECONDS * 1000);
+  log.say("drained", {
+    signal,
+    saved: drained.saved,
+    failed: drained.failed,
+    stillPending: drained.pending,
+    refusedAfterClose: queue.refused(),
+    drainSeconds: SHUTDOWN_DRAIN_SECONDS,
+  });
+  if (drained.pending > 0) log.say("writes_lost", { count: drained.pending, stored: false, note: "queued but not confirmed by the relayer before shutdown" });
+  if (pending.waiting() > 0) log.say("unclassified_lost", { count: pending.waiting(), stored: false, note: "held in memory only, never written to Walrus" });
+  server.close();
   log.say("stopped", { signal, pending: pending.describe() });
   process.exit(0);
 }
 process.once("SIGINT", () => void stop("SIGINT"));
 process.once("SIGTERM", () => void stop("SIGTERM"));
 
-log.say("ready", { bots: `member+manager`, seqNext: seq.peek(), queue: queue.depth(), managers: config.telegram.managerIds.length });
-void managerBot.bot.start({ onStart: (me) => log.say("polling", { bot: "manager", username: me.username }) });
-await memberBot.bot.start({ onStart: (me) => log.say("polling", { bot: "member", username: me.username }) });
+log.say("ready", { bots: "member+manager", seqNext: seq.peek(), queue: queue.depth(), managers: config.telegram.managerIds.length, port: config.port });
+await Promise.all(supervisors.map((supervisor) => supervisor.run()));
