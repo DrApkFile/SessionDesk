@@ -29,7 +29,9 @@ export function buildFactsSheet(state: CommunityState, memberH: string, now: Dat
     "items you filed:",
     ...(items.length === 0
       ? [`  ${NOTHING_RECORDED}`]
-      : items.map((item) => `  ${item.itemId} (${item.kind}) status=${item.status} since ${item.statusTs.slice(0, 10)}: ${item.text}`)),
+      : items.map(
+          (item) => `  ${item.itemId} (${item.kind}) status=${item.status} since ${item.statusTs.slice(0, 10)}${item.affected === 0 ? "" : `, ${item.affected} other member(s) affected`}: ${item.text}`,
+        )),
     "promises made to you that are still open:",
     ...(promises.length === 0
       ? [`  ${NOTHING_RECORDED}`]

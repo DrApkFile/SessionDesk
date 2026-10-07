@@ -7,6 +7,7 @@ export interface FakeMemoryOptions {
   readonly failWritesBefore?: number;
   readonly writeFailureCode?: ErrorCode;
   readonly recallFailures?: ReadonlySet<string>;
+  readonly searchHits?: ReadonlyMap<string, ReadonlyArray<{ text: string; blobId: string; distance: number }>>;
   readonly droppedPerNamespace?: ReadonlyMap<string, number>;
   readonly listFails?: boolean;
 }
@@ -14,6 +15,7 @@ export interface FakeMemoryOptions {
 export class FakeMemory implements MemoryPort {
   readonly stored = new Map<string, { text: string; blobId: string }[]>();
   readonly writeCalls: MemoryWrite[] = [];
+  readonly searchCalls: Array<{ namespace: string; query: string; limit: number; maxDistance: number }> = [];
   readonly blobsByKey = new Map<string, string>();
   #blobCounter = 0;
   #writeAttempts = 0;
@@ -51,9 +53,22 @@ export class FakeMemory implements MemoryPort {
     const held = [...(this.stored.get(namespace) ?? [])].reverse().slice(0, limit);
     return ok({
       namespace,
-      lines: held.map((line) => ({ text: line.text, blobId: line.blobId, createdAt: null })),
+      lines: held.map((line) => ({ text: line.text, blobId: line.blobId, createdAt: null, distance: null })),
       droppedCount: this.#options.droppedPerNamespace?.get(namespace) ?? 0,
       atLimit: held.length >= limit,
+    });
+  }
+
+  async search(namespace: string, query: string, limit: number, maxDistance: number): Promise<Result<NamespaceRecall>> {
+    this.searchCalls.push({ namespace, query, limit, maxDistance });
+    if (this.#options.recallFailures?.has(namespace) === true) return refuse("MEMORY_UNAVAILABLE", "fake search error");
+    const hits = this.#options.searchHits?.get(namespace) ?? [];
+    const kept = hits.filter((hit) => hit.distance <= maxDistance).slice(0, limit);
+    return ok({
+      namespace,
+      lines: kept.map((hit) => ({ text: hit.text, blobId: hit.blobId, createdAt: null, distance: hit.distance })),
+      droppedCount: 0,
+      atLimit: kept.length >= limit,
     });
   }
 

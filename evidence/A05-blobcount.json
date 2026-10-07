@@ -1,19 +1,59 @@
 {
-  "runId": "a0ef9f92",
-  "commit": "48176a1",
-  "date": "2026-10-07T18:32:52.561Z",
+  "runId": "cd45f034",
+  "commit": "8999c27",
+  "date": "2026-10-07T20:46:35.421Z",
   "environment": "node v24.19.0 on linux",
   "network": "walrus memory mainnet",
   "serverUrl": "https://relayer.memory.walrus.xyz",
   "communityKey": "c1",
   "source": "real consented members only; no seeded or demo data",
+  "agentId": "0x511587de47c627cc11f0ef18496101611723e6bdf862eec4ef500271c21f0c8e",
+  "agentIdNote": "account A delegate Ed25519 public key, the value the submission form calls MEMWAL_AGENT_ID",
+  "agentSuiAddress": "0x1a90dad853d39e51f5ec1f4a1da3e5e4735bd2d42f5a5a0a1f954315ad503391",
   "agentAccountId": "0x4ea4e680256e9a524767782bb41ca53ecbf4829a2a709f69c8cad6712ae7efc0",
   "notesAccountId": "0x9c99811be79da9d31e9a8fa4feae7a86608e264efe3bb06b9ab9ca86416c2de1",
-  "blobsOnAccountA": 0,
+  "blobsOnAccountA": 4,
   "blobsOnAccountB": 0,
-  "blobsTotal": 0,
-  "namespacesOnAccountA": 0,
+  "blobsTotal": 4,
+  "namespacesOnAccountA": 3,
   "namespacesOnAccountB": 0,
   "namespacesUnreadable": [],
-  "byNamespace": []
+  "byNamespace": [
+    {
+      "label": "sd-c1-items",
+      "namespace": "sd-c1-items",
+      "kind": "items",
+      "blobs": 1
+    },
+    {
+      "label": "member:e86828cf",
+      "namespace": "sd-c1-m-e86828cf24568fce513e7c39",
+      "kind": "member",
+      "blobs": 2
+    },
+    {
+      "label": "sd-c1-themes",
+      "namespace": "sd-c1-themes",
+      "kind": "themes",
+      "blobs": 1
+    }
+  ],
+  "everyBlob": [
+    {
+      "id": "Di4mj8nYS1sX5j0FDl3YFrxE8UlbOkXKoQ2t0OJUcCI",
+      "walruscan": "https://walruscan.com/mainnet/blob/Di4mj8nYS1sX5j0FDl3YFrxE8UlbOkXKoQ2t0OJUcCI"
+    },
+    {
+      "id": "x3pDM6Yb41CThysVrS65kk7XAcjYoofehF0Z7lXcwMY",
+      "walruscan": "https://walruscan.com/mainnet/blob/x3pDM6Yb41CThysVrS65kk7XAcjYoofehF0Z7lXcwMY"
+    },
+    {
+      "id": "vMxG0AU-XnQju3-E9KsaqYT50Vu3g61uQAfgnRaiSik",
+      "walruscan": "https://walruscan.com/mainnet/blob/vMxG0AU-XnQju3-E9KsaqYT50Vu3g61uQAfgnRaiSik"
+    },
+    {
+      "id": "e9564N1WtTnXPiihanbj1iP90T7UQo6zYbGheyhxgFc",
+      "walruscan": "https://walruscan.com/mainnet/blob/e9564N1WtTnXPiihanbj1iP90T7UQo6zYbGheyhxgFc"
+    }
+  ]
 }

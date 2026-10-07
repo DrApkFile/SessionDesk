@@ -7,5 +7,6 @@ export function randomIds(): IdSource {
     newItemId: () => `i-${token()}`,
     newThemeId: () => `t-${token()}`,
     newPromiseId: () => `p-${token()}`,
+    newAnswerId: () => `a-${token()}`,
   };
 }

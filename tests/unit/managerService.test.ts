@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ERRORS } from "../../src/core/errors.js";
 import { SUMMARY_HEADER } from "../../src/bots/manager/summary.js";
+import { WEEKLY_HEADER } from "../../src/bots/manager/weekly.js";
 import { MANAGER_ID, NOTES_NAMESPACE, OUTSIDER_ID, managerHarness, type ManagerHarness } from "../support/managerHarness.js";
 
 const MEMBER_ID = 42_000_001;
@@ -268,5 +269,145 @@ describe("free text is answered from the code-built summary only", () => {
 
   it("shows the command list for an unknown command", async () => {
     expect(await managerHarness().ask("/nonsense")).toContain("Manager commands:");
+  });
+});
+
+describe("the weekly report is drafted from counted data", () => {
+  it("shows the draft and the data it was written from", async () => {
+    const field = managerHarness({ answer: "One bug was filed this week and it is reported. Nothing is overdue." });
+    openItem(field);
+    const report = await field.ask("/report");
+    expect(report).toContain("One bug was filed this week");
+    expect(report).toContain(WEEKLY_HEADER);
+    expect(report).toContain("items filed in the window: 1");
+    expect(report).toContain("Draft only, from the counted data below");
+  });
+
+  it("refuses a draft that invents a status and hands over the data instead", async () => {
+    const field = managerHarness({ answer: "Great week: everything was verified and shipped." });
+    openItem(field);
+    const report = await field.ask("/report");
+    expect(report).toContain(ERRORS.MODEL_OUTPUT_REFUSED.message);
+    expect(report).toContain(WEEKLY_HEADER);
+    expect(report).not.toContain("verified and shipped");
+  });
+
+  it("hands over the data when qwen is down", async () => {
+    const field = managerHarness({ modelStatus: 503 });
+    openItem(field);
+    const report = await field.ask("/report");
+    expect(report).toContain(ERRORS.MODEL_UNAVAILABLE.message);
+    expect(report).toContain(WEEKLY_HEADER);
+  });
+
+  it("counts an empty week honestly rather than padding it", async () => {
+    const field = managerHarness({ answer: "Nothing was filed this week." });
+    const report = await field.ask("/report");
+    expect(report).toContain("items filed in the window: 0");
+    expect(report).toContain("promises made in the window: 0");
+  });
+
+  it("offers /report in the command list", async () => {
+    expect(await managerHarness().ask("/nonsense")).toContain("/report");
+  });
+});
+
+function recordAnswer(field: ManagerHarness, answerId = "a-1", questionText = "how do I reset my password?"): void {
+  field.pipeline.commit(
+    [{ draft: { type: "ANSWER", answerId, questionText, answerText: "Open settings, then Account, then Reset.", answeredBy: "manager", themeId: "t-login" }, namespaces: [{ kind: "answers" }] }],
+    { chatId: -100, messageId: 50 },
+    field.clock.now(),
+  );
+}
+
+describe("the manager curates the community's answers", () => {
+  it("lists them with who answered, when, and whether they are still reused", async () => {
+    const field = managerHarness();
+    recordAnswer(field);
+    const listed = await field.ask("/answers");
+    expect(listed).toContain("1 answer(s)");
+    expect(listed).toContain("a-1 active by manager");
+    expect(listed).toContain("Q: how do I reset my password?");
+    expect(listed).toContain("A: Open settings");
+  });
+
+  it("says plainly when there are none", async () => {
+    expect(await managerHarness().ask("/answers")).toContain("No answers on record yet");
+  });
+
+  it("retires one so it is never reused again, and refuses to retire it twice", async () => {
+    const field = managerHarness();
+    recordAnswer(field);
+    expect(await field.ask("/retire a-1")).toContain("is retired and will not be reused");
+    expect(field.cache.state().answers.get("a-1")?.state).toBe("retired");
+    expect(await field.ask("/retire a-1")).toContain("already retired");
+    expect(await field.ask("/answers")).toContain("a-1 RETIRED");
+  });
+
+  it("refuses an id it does not hold, or one that matches two answers", async () => {
+    const field = managerHarness();
+    recordAnswer(field, "a-1");
+    recordAnswer(field, "a-12");
+    expect(await field.ask("/retire a-nothing")).toContain(ERRORS.UNKNOWN_ITEM.message);
+    expect(await field.ask("/retire a-1")).toContain("is retired");
+    expect(await field.ask("/retire a-")).toContain(ERRORS.AMBIGUOUS_TARGET.message);
+  });
+
+  it("refuses a non-manager", async () => {
+    const field = managerHarness();
+    recordAnswer(field);
+    expect(await field.ask("/retire a-1", { userId: OUTSIDER_ID })).toContain(ERRORS.NOT_MANAGER.message);
+    expect(field.cache.state().answers.get("a-1")?.state).toBe("active");
+  });
+
+  it("offers both commands in the list", async () => {
+    const listed = await managerHarness().ask("/nonsense");
+    expect(listed).toContain("/answers");
+    expect(listed).toContain("/retire");
+  });
+});
+
+describe("affected counts are visible to the manager", () => {
+  function affect(field: ManagerHarness, itemId: string, memberH: string): void {
+    field.pipeline.commit([{ draft: { type: "ITEM_AFFECTS", itemId, memberH }, namespaces: [{ kind: "items" }] }], { chatId: -100, messageId: 60 }, field.clock.now());
+  }
+
+  it("/themes shows how many extra members an item affects", async () => {
+    const field = managerHarness();
+    openItem(field);
+    affect(field, "i-abc123", "b".repeat(24));
+    affect(field, "i-abc123", "c".repeat(24));
+    expect(await field.ask("/themes")).toContain("2 extra member(s) affected");
+  });
+
+  it("/member shows the items that also affect them", async () => {
+    const field = managerHarness();
+    const memberH = openItem(field);
+    affect(field, "i-abc123", "b".repeat(24));
+    const other = managerHarness();
+    openItem(other);
+    affect(other, "i-abc123", memberH);
+    expect(await other.ask("/member @ada")).toContain("also affected by: i-abc123");
+  });
+
+  it("the facts sheet tells the member how many others are affected", async () => {
+    const field = managerHarness();
+    openItem(field);
+    affect(field, "i-abc123", "b".repeat(24));
+    expect(await field.ask("/member @ada")).toContain("1 other member(s) affected");
+  });
+});
+
+describe("/member works on a reply after a restart, without the member speaking first", () => {
+  it("finds the member by hashing the replied-to id, not by the in-memory directory", async () => {
+    const field = managerHarness();
+    openItem(field);
+    const fresh = managerHarness();
+    fresh.cache.replaceAll(field.cache.lines());
+    expect(fresh.directory.size()).toBe(0);
+    const card = await fresh.ask("/member", { replyToUserId: MEMBER_ID });
+    expect(card).toContain("MEMBER FACTS");
+    expect(card).toContain("status=reported");
+    expect(card).toContain(fresh.memberHashOf(MEMBER_ID).slice(0, 8));
   });
 });

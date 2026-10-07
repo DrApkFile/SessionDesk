@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { recordedSleep } from "../../src/core/ports.js";
-import { BUDGET_PAUSE_RECHECK_MS, WRITE_ATTEMPTS, WRITE_PAUSE_LIMIT, WRITE_RETRY_BACKOFF_MS } from "../../src/core/tuning.js";
+import { BUDGET_PAUSE_RECHECK_MS, WRITE_ATTEMPTS, WRITE_RETRY_BACKOFF_MS } from "../../src/core/tuning.js";
 import { WriteQueue, backoffFor, type WriteJob } from "../../src/memory/writeQueue.js";
 import { FakeMemory } from "../support/fakeMemory.js";
 
@@ -86,15 +86,16 @@ describe("F07 the queue pauses instead of overspending the points budget", () =>
     expect(queue.paused()).toBe(false);
   });
 
-  it("stops waiting for the budget after a bounded number of rechecks", async () => {
+  it("keeps a rate-limited write pending for as long as the limit lasts, never marking it failed", async () => {
     const waits: number[] = [];
-    const memory = new FakeMemory({ failWritesBefore: 10_000, writeFailureCode: "BUDGET_EXHAUSTED" });
+    const memory = new FakeMemory({ failWritesBefore: 4, writeFailureCode: "BUDGET_EXHAUSTED" });
     const queue = new WriteQueue(memory, recordedSleep(waits), () => {});
     const job = queue.enqueue(request(11));
     await queue.settled();
-    expect(waits).toHaveLength(WRITE_PAUSE_LIMIT);
-    expect(job.state).toBe("failed");
-    expect(job.code).toBe("BUDGET_EXHAUSTED");
+    expect(waits).toEqual(Array.from({ length: 4 }, () => BUDGET_PAUSE_RECHECK_MS));
+    expect(job.attempts).toBe(0);
+    expect(job.state).toBe("saved");
+    expect(queue.pauses()).toBe(4);
   });
 });
 

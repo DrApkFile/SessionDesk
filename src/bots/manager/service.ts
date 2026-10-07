@@ -6,9 +6,10 @@ import { managerPrompt } from "../../models/prompts.js";
 import { commandOf, isCommand, reply, silent, type BotAction, type IncomingMessage } from "../shared/incoming.js";
 import type { ManagerContext, ManagerDeps } from "./deps.js";
 import { MANAGER_HELP } from "./help.js";
+import { listAnswers, retire } from "./answerCommands.js";
 import { listNotes, writeNote } from "./noteCommands.js";
 import { donePromise, makePromise, owed } from "./promiseCommands.js";
-import { helpers, memberCard, status, themes } from "./reportCommands.js";
+import { helpers, memberCard, status, themes, weeklyReport } from "./reportCommands.js";
 import { changeStatus, isStatusCommand } from "./statusCommands.js";
 import { buildSummary } from "./summary.js";
 import { grantAmbassador, revokeAmbassador } from "./tierCommands.js";
@@ -50,6 +51,9 @@ export class ManagerService {
     if (name === "/notes") return listNotes(this.#deps);
     if (name === "/ambassador") return grantAmbassador(this.#deps, context, rest);
     if (name === "/unambassador") return revokeAmbassador(this.#deps, context, rest);
+    if (name === "/answers") return listAnswers(this.#deps);
+    if (name === "/retire") return retire(this.#deps, context, rest);
+    if (name === "/report") return weeklyReport(this.#deps);
     if (name === "/status") return status(this.#deps);
     return reply(MANAGER_HELP);
   }

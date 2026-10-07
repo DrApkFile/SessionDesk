@@ -18,6 +18,10 @@ export const EVENT_AUTHORITY = {
   MANAGER_NOTE: "manager_command",
   TIER_SET: "manager_command",
   TIER_REVOKED: "manager_command",
+  ANSWER: "write_gate",
+  ANSWER_RETIRED: "manager_command",
+  ITEM_AFFECTS: "write_gate",
+  DM_ADDRESS: "member_command",
 } satisfies Record<EventType, Authority>;
 
 export type EventTypeFrom<A extends Authority> = {

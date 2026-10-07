@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  ANSWER_SOURCES,
   CONTRIBUTION_KINDS,
   EVENT_TYPES,
   GRANTABLE_TIERS,
@@ -39,6 +40,18 @@ export const EVENT_PAYLOADS = {
   MANAGER_NOTE: z.object({ memberH: memberHash.optional(), text: storedText }).strict(),
   TIER_SET: z.object({ memberH: memberHash, tier: z.enum(GRANTABLE_TIERS), byManagerId: wholeNumber.positive() }).strict(),
   TIER_REVOKED: z.object({ memberH: memberHash, byManagerId: wholeNumber.positive() }).strict(),
+  ANSWER: z
+    .object({
+      answerId: identifier,
+      questionText: storedText.optional(),
+      answerText: storedText,
+      answeredBy: z.enum(ANSWER_SOURCES),
+      themeId: identifier,
+    })
+    .strict(),
+  ANSWER_RETIRED: z.object({ answerId: identifier, byManagerId: wholeNumber.positive() }).strict(),
+  ITEM_AFFECTS: z.object({ itemId: identifier, memberH: memberHash }).strict(),
+  DM_ADDRESS: z.object({ telegramUserId: wholeNumber.positive() }).strict(),
 } satisfies Record<EventType, z.ZodObject>;
 
 export type PayloadOf<K extends EventType> = z.infer<(typeof EVENT_PAYLOADS)[K]>;

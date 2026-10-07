@@ -1,0 +1,123 @@
+{
+  "runId": "8fe64583",
+  "commit": "8999c27",
+  "date": "2026-10-07T21:40:16.037Z",
+  "environment": "node v24.19.0 on linux",
+  "network": "walrus memory mainnet",
+  "communityKey": "c1meas",
+  "preRegistered": "docs/DECISIONS.md, written before this run",
+  "n": 5,
+  "metric": "percentage of scenarios whose model context contains at least one status for the queried item that is not its current status",
+  "tokenMethod": "estimateTokens from @mysten-incubation/memwal",
+  "bothArmsReadFromWalrus": true,
+  "resolverLinesReadBack": 20,
+  "plainTopK": 5,
+  "arms": {
+    "plainSemanticRecall": {
+      "staleContextPercent": 40,
+      "meanContextTokens": 160,
+      "cases": [
+        {
+          "scenario": "is the android login bug fixed yet?",
+          "itemId": "i-8fe64583-0",
+          "currentStatus": "fixed",
+          "staleStatuses": [],
+          "stale": false,
+          "tokens": 195,
+          "lines": 5
+        },
+        {
+          "scenario": "any news on the card payment failure?",
+          "itemId": "i-8fe64583-1",
+          "currentStatus": "fixed",
+          "staleStatuses": [
+            "acknowledged"
+          ],
+          "stale": true,
+          "tokens": 161,
+          "lines": 5
+        },
+        {
+          "scenario": "did you fix push notifications on ios?",
+          "itemId": "i-8fe64583-2",
+          "currentStatus": "fixed",
+          "staleStatuses": [
+            "acknowledged"
+          ],
+          "stale": true,
+          "tokens": 144,
+          "lines": 5
+        },
+        {
+          "scenario": "what is the status of the csv export bug?",
+          "itemId": "i-8fe64583-3",
+          "currentStatus": "fixed",
+          "staleStatuses": [],
+          "stale": false,
+          "tokens": 124,
+          "lines": 5
+        },
+        {
+          "scenario": "is arabic search working now?",
+          "itemId": "i-8fe64583-4",
+          "currentStatus": "fixed",
+          "staleStatuses": [],
+          "stale": false,
+          "tokens": 174,
+          "lines": 5
+        }
+      ]
+    },
+    "resolver": {
+      "staleContextPercent": 0,
+      "meanContextTokens": 165,
+      "cases": [
+        {
+          "scenario": "is the android login bug fixed yet?",
+          "itemId": "i-8fe64583-0",
+          "currentStatus": "fixed",
+          "staleStatuses": [],
+          "stale": false,
+          "tokens": 165,
+          "lines": 5
+        },
+        {
+          "scenario": "any news on the card payment failure?",
+          "itemId": "i-8fe64583-1",
+          "currentStatus": "fixed",
+          "staleStatuses": [],
+          "stale": false,
+          "tokens": 165,
+          "lines": 5
+        },
+        {
+          "scenario": "did you fix push notifications on ios?",
+          "itemId": "i-8fe64583-2",
+          "currentStatus": "fixed",
+          "staleStatuses": [],
+          "stale": false,
+          "tokens": 165,
+          "lines": 5
+        },
+        {
+          "scenario": "what is the status of the csv export bug?",
+          "itemId": "i-8fe64583-3",
+          "currentStatus": "fixed",
+          "staleStatuses": [],
+          "stale": false,
+          "tokens": 165,
+          "lines": 5
+        },
+        {
+          "scenario": "is arabic search working now?",
+          "itemId": "i-8fe64583-4",
+          "currentStatus": "fixed",
+          "staleStatuses": [],
+          "stale": false,
+          "tokens": 165,
+          "lines": 5
+        }
+      ]
+    }
+  }
+}

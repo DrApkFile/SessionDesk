@@ -2,14 +2,15 @@ import { createHmac } from "node:crypto";
 
 export const MEMBER_HASH_HEX_CHARS = 24;
 
-export const NAMESPACE_KINDS = ["member", "items", "themes", "notes", "other"] as const;
+export const NAMESPACE_KINDS = ["member", "items", "themes", "notes", "answers", "other"] as const;
 export type NamespaceKind = (typeof NAMESPACE_KINDS)[number];
 
 export type NamespaceRef =
   | { readonly kind: "member"; readonly memberH: string }
   | { readonly kind: "items" }
   | { readonly kind: "themes" }
-  | { readonly kind: "notes" };
+  | { readonly kind: "notes" }
+  | { readonly kind: "answers" };
 
 export function memberHash(namespaceSecret: string, telegramUserId: number): string {
   return createHmac("sha256", namespaceSecret).update(String(telegramUserId)).digest("hex").slice(0, MEMBER_HASH_HEX_CHARS);
@@ -33,7 +34,7 @@ export function memberHashFromNamespace(communityKey: string, namespace: string)
 
 export function namespaceKindOf(namespace: string): NamespaceKind {
   if (namespace.includes("-m-")) return "member";
-  for (const kind of ["items", "themes", "notes"] as const) {
+  for (const kind of ["items", "themes", "notes", "answers"] as const) {
     if (namespace.endsWith(`-${kind}`)) return kind;
   }
   return "other";

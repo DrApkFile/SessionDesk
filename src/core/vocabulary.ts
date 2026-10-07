@@ -12,6 +12,10 @@ export const EVENT_TYPES = [
   "MANAGER_NOTE",
   "TIER_SET",
   "TIER_REVOKED",
+  "ANSWER",
+  "ANSWER_RETIRED",
+  "ITEM_AFFECTS",
+  "DM_ADDRESS",
 ] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
 
@@ -35,6 +39,12 @@ export type GrantableTier = (typeof GRANTABLE_TIERS)[number];
 
 export const PROMISE_STATES = ["open", "fulfilled"] as const;
 export type PromiseState = (typeof PROMISE_STATES)[number];
+
+export const ANSWER_SOURCES = ["manager", "member"] as const;
+export type AnswerSource = (typeof ANSWER_SOURCES)[number];
+
+export const ANSWER_STATES = ["active", "retired"] as const;
+export type AnswerState = (typeof ANSWER_STATES)[number];
 
 export const MESSAGE_KINDS = ["question", "bug", "feature", "feedback", "thanks", "profile", "chit_chat", "other"] as const;
 export type MessageKind = (typeof MESSAGE_KINDS)[number];

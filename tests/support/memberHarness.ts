@@ -17,6 +17,7 @@ import type { FetchLike } from "../../src/models/textModel.js";
 import { FakeMemory, type FakeMemoryOptions } from "./fakeMemory.js";
 
 export const GROUP_CHAT_ID = -1001234567890;
+export const MANAGER_ID = 4242;
 export const COMMUNITY = "c1";
 export const SECRET_PHRASE = "ada@example.com";
 
@@ -45,6 +46,7 @@ export interface Harness {
   message(partial: Partial<IncomingMessage>): IncomingMessage;
   namespaceOfMember(userId: number): string;
   breakModel(status?: number): void;
+  classifyAs(json: string): void;
   mendModel(): void;
   breakGroq(status?: number): void;
   advanceMinutes(minutes: number): void;
@@ -54,6 +56,7 @@ interface ModelState {
   status: number;
   groqStatus: number;
   at: Date;
+  classification: string;
 }
 
 function modelFetch(options: HarnessOptions, modelState: ModelState): FetchLike {
@@ -61,7 +64,7 @@ function modelFetch(options: HarnessOptions, modelState: ModelState): FetchLike 
     const status = modelState.status;
     if (status >= 400) return { ok: false, status, text: async () => "high demand" };
     const classifying = init.body.includes("Reply with JSON only");
-    const text = classifying ? (options.classification ?? '{"kind":"chit_chat"}') : (options.replyText ?? "Here is what I have on record for you.");
+    const text = classifying ? modelState.classification : (options.replyText ?? "Here is what I have on record for you.");
     return { ok: true, status, text: async () => JSON.stringify({ candidates: [{ content: { parts: [{ text }] } }] }) };
   };
 }
@@ -75,7 +78,12 @@ function groqFetch(options: HarnessOptions, modelState: ModelState): FetchLike {
 }
 
 export function harness(options: HarnessOptions = {}): Harness {
-  const modelState: ModelState = { status: options.modelStatus ?? 200, groqStatus: options.groqStatus ?? 200, at: new Date("2026-10-08T09:00:00.000Z") };
+  const modelState: ModelState = {
+    status: options.modelStatus ?? 200,
+    groqStatus: options.groqStatus ?? 200,
+    at: new Date("2026-10-08T09:00:00.000Z"),
+    classification: options.classification ?? '{"kind":"chit_chat"}',
+  };
   const memory = new FakeMemory(options.memory ?? {});
   const cache = new LedgerCache();
   const queue = new WriteQueue(memory, async () => {}, (job) => {
@@ -90,6 +98,7 @@ export function harness(options: HarnessOptions = {}): Harness {
   );
   const chat = new CommunityChat(GROUP_CHAT_ID);
   const directory = new MemberDirectory();
+  const self = { username: "sdmemberbot" };
   const clock = { now: () => modelState.at };
   const waits: number[] = [];
   const gemini = new GeminiModel({ apiKey: "AIzatestkey", model: "gemini-3.8-flash", fallbackModel: "gemini-3.5-flash" }, async () => {}, modelFetch(options, modelState));
@@ -118,6 +127,9 @@ export function harness(options: HarnessOptions = {}): Harness {
     chat,
     ids: countingIds(),
     directory,
+    memory,
+    managerIds: [MANAGER_ID],
+    self,
   });
 
   built = service;
@@ -139,6 +151,9 @@ export function harness(options: HarnessOptions = {}): Harness {
     breakModel: (status = 503) => {
       modelState.status = status;
     },
+    classifyAs: (json: string) => {
+      modelState.classification = json;
+    },
     mendModel: () => {
       modelState.status = 200;
     },
@@ -159,6 +174,7 @@ export function harness(options: HarnessOptions = {}): Harness {
       mentionsBot: false,
       replyToUserId: null,
       replyToIsBot: false,
+      replyToText: null,
       ...partial,
     }),
   };

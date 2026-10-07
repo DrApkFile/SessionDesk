@@ -5,9 +5,11 @@ with the current state of things, and a manager bot (Qwen on Groq) for follow-up
 private notes. Built for Walrus Sessions 8, "Chatbots That Remember".
 
 ## Status
-Build steps 1-4 of 7 done (PRD §12): config, the pure core, the Walrus memory layer, the member
-bot and the manager bot. `npm run gate` is green: typecheck, no-comments check, .env-not-tracked
-check, and 306 unit and adversarial tests (no network), run 2026-10-07 on Node 24.19.0 / Linux.
+Build steps 1-5 of 7 done (PRD §12), plus the P1 items that matter for a real community: config,
+the pure core, the Walrus memory layer, the member bot, the manager bot, deployment, the evidence
+script, JUDGING.md, /report and the follow-up scheduler. Deployed on Render.
+`npm run gate` is green: typecheck, no-comments check, .env-not-tracked check, and 431 unit and
+adversarial tests (no network), run 2026-10-07 on Node 24.19.0 / Linux.
 The restore test has been run once against Walrus mainnet: evidence/restore-test-5c2ff4cb.json
 (6 blobs written, 35.7 s per write, cache wiped and rebuilt, status still correct).
 
@@ -24,18 +26,37 @@ The restore test has been run once against Walrus mainnet: evidence/restore-test
 - `src/models/gemini.ts` 503 retry then `GEMINI_FALLBACK_MODEL`, then an honest template reply
 - `src/bots/member/` consent flow, classification, write gate, replies built only from the
   code-made facts sheet, /mydata with a Walrus receipt per line, /correct, /help
+- Opt-in from the group: a manager runs /optin, the bot posts and pins a notice with I agree and
+  I agree + DMs. A tap records consent under the tapper's own namespace hash and answers them
+  privately with show_alert. A second tap writes nothing. Taps from any other chat are ignored.
+  A group tap for DMs records storage consent and points at t.me/<bot>?start=dm, because Telegram
+  will not let a bot message someone who has never pressed Start
 - `src/models/classifier.ts` holds a message in memory and retries when no model can read it,
   falling back to Qwen on Groq after GEMINI_RETRY_WINDOW_MINUTES; nothing is stored until a
   valid classification exists, and the buffer is lost on restart, which it says out loud
 - `src/bots/manager/` /owed, /themes, /helpers, /member, /ack, /fixed, /verify, /reopen,
-  /duplicate, /wontfix, /promise, /done, /note, /notes, /ambassador, /unambassador, /status,
-  and free text answered by Qwen over a code-built summary only. Manager notes are written to
-  account B, which only this directory can construct, into its own cache
+  /duplicate, /wontfix, /promise, /done, /note, /notes, /ambassador, /unambassador, /report,
+  /status, and free text answered by Qwen over a code-built summary only. Manager notes are
+  written to account B, which only this directory can construct, into its own cache
+- Follow-up scheduler: when a promise comes due it DMs every manager, and DMs the member only if
+  they agreed to DMs, saying honestly that it is still open and the team has been reminded. A
+  DM_ADDRESS line in the member's own namespace keeps them reachable across restarts
+- Community answers: when a manager answers a member's question, or a member's reply is thanked,
+  the answer becomes community memory. The next person to ask gets the earlier answer, who gave
+  it, the date and a Walruscan receipt, but only when exactly one answer is close enough.
+  /answers lists them, /retire stops one being reused
+- Known issues: a bug report that clearly matches an open item is linked to it (+1 affected)
+  instead of opening a duplicate, and the reporter is told the current status
+- A relayer 429 is treated as a budget problem: the queue pauses for exactly the backoff the
+  relayer asked for and the write stays pending, never failed
 
 ### Not built yet
-- Evidence script, JUDGING.md (step 5); everything in PRD §11 P1, including /report, the
-  follow-up scheduler that DMs about due promises, namespace roll-over, and the measured
-  stale-status comparison
+- Namespace roll-over at 90 entries per namespace (designed, flagged in code, not built)
+- Nothing from the measured comparison is outstanding: it was pre-registered and run on mainnet
+  (run 8fe64583, N=5): plain top-5 semantic recall carried a stale status in 40% of cases, the
+  resolver in 0%, at 160 against 165 mean context tokens. Read the caveats in JUDGING.md
+- Everything in docs/ROADMAP.md: web dashboard, Discord and Slack, multi-community, separate
+  deployments per bot, per-member Walrus accounts
 - While Gemini is down, a member is answered from the facts sheet but their message is not
   classified or stored (docs/DECISIONS.md)
 - No event type can set the `ambassador` tier: the frozen event list has none, so that tier is
@@ -43,11 +64,49 @@ The restore test has been run once against Walrus mainnet: evidence/restore-test
 - The "reply path never awaits a write" test arrives with the write queue in step 2
 - No mainnet numbers are claimed here yet. Proven facts: briefing/REALITY_SPIKES.md
 
-## Setup (once code exists)
-1. Node 22+. `npm ci`
-2. `cp .env.example .env` and fill it (see comments in the file).
-3. @BotFather: `/setprivacy` -> member bot -> Disable. Add the member bot to the group as admin.
-4. `npm run gate`, then `npm run dev`. For a deployed instance see Deploy below.
+## Setup from a clean clone
+1. **Node 22 or newer.** `npm ci`
+2. **Two Telegram bots** from @BotFather: one member bot, one manager bot. For the member bot run
+   `/setprivacy` and choose **Disable**, or it cannot see group messages and this app refuses to
+   start. Add the member bot to your group.
+3. **Make the member bot an admin of the group** if you want `/optin` to pin its notice. Without
+   pin rights it still posts the notice and logs `optin_pin_failed`.
+4. **Two Walrus Memory accounts** (account A for community memory, account B for manager notes
+   only). You need each account's object id and its delegate key.
+5. **Model keys:** a Gemini API key and a Groq API key.
+6. **Your own ids:** your numeric Telegram id from @userinfobot for `MANAGER_TELEGRAM_IDS`, and the
+   group's chat id. The member bot logs the chat id it sees at startup, and refuses to run if it
+   does not match `COMMUNITY_CHAT_ID`.
+7. `cp .env.example .env` and fill every value. `NAMESPACE_SECRET` must be a long random string:
+   `openssl rand -hex 32`. **Never change it after members join** - it is the key that maps a
+   Telegram id to a namespace, so changing it orphans every memory already written.
+8. `npm run gate` - typecheck, no-comments check, .env-not-tracked check, and the full unit and
+   adversarial suite. No network, no keys needed.
+9. `npm run dev` starts both bots and the health server on port 3000.
+
+### What you should see
+```
+sessiondesk config accountA=0x… communityKey=c1 communityChatId=-100… port=3000
+sessiondesk boot_done summary=namespaces=N lines=N decoded=N … maxSeq=N nextSeq=N complete=true
+sessiondesk notes_boot_done … account=B namespace=sd-<key>-notes
+sessiondesk.member identity username=… canReadAllGroupMessages=true
+sessiondesk group configured=-100… seen=-100… type=supergroup title=…
+sessiondesk ready bots=member+manager seqNext=N queue=0 managers=1
+sessiondesk polling bot=manager …
+sessiondesk polling bot=member …
+```
+If `canReadAllGroupMessages` is false, privacy mode is still on. If `group` does not appear, the
+bot is not in the group or `COMMUNITY_CHAT_ID` is wrong; both refuse to start rather than run half
+working.
+
+### Other commands
+- `npm run evidence` per-member memory counts, blob ids with Walruscan links, and the agent id
+  into `evidence/`. Reads mainnet, costs a few points.
+- `npm run test:live` the restore test: writes to mainnet, wipes the cache, rebuilds, compares.
+  **Spends real points** - run it deliberately.
+- `npm test` unit and adversarial only, no network.
+
+See `JUDGING.md` for what each claim means and how to check it.
 
 ## Deploy (Render free web service, one service runs both bots)
 

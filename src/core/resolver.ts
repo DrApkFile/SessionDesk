@@ -48,7 +48,7 @@ function apply(state: CommunityState, entry: LedgerEntry, seenBySeq: Map<number,
       if (memberH === null) return reject(state);
       const member = memberIn(state, memberH);
       member.consented = true;
-      member.dmConsent = member.dmConsent || event.scope === "storage_and_dm";
+      member.dmConsent = event.scope === "storage_and_dm";
       return;
     }
     case "PROFILE_FACT": {
@@ -76,6 +76,8 @@ function apply(state: CommunityState, entry: LedgerEntry, seenBySeq: Map<number,
           openedTs: event.ts,
           statusSeq: event.seq,
           statusTs: event.ts,
+          affected: 0,
+          affectedBy: [],
         });
       } else if (memberH !== null) {
         existing.openedByH = memberH;
@@ -149,6 +151,41 @@ function apply(state: CommunityState, entry: LedgerEntry, seenBySeq: Map<number,
       const revoked = revokeTier(member.grantedTier);
       if (!revoked.ok) return reject(state);
       member.grantedTier = revoked.value;
+      return;
+    }
+    case "ANSWER": {
+      if (state.answers.has(event.answerId)) return reject(state);
+      state.answers.set(event.answerId, {
+        answerId: event.answerId,
+        questionText: event.questionText ?? null,
+        answerText: event.answerText,
+        answeredBy: event.answeredBy,
+        themeId: event.themeId,
+        seq: event.seq,
+        ts: event.ts,
+        state: "active",
+        retiredTs: null,
+      });
+      return;
+    }
+    case "ANSWER_RETIRED": {
+      const answer = state.answers.get(event.answerId);
+      if (answer === undefined || answer.state !== "active") return reject(state);
+      answer.state = "retired";
+      answer.retiredTs = event.ts;
+      return;
+    }
+    case "ITEM_AFFECTS": {
+      const item = state.items.get(event.itemId);
+      if (item === undefined || item.affectedBy.includes(event.memberH)) return reject(state);
+      item.affected += 1;
+      item.affectedBy.push(event.memberH);
+      pushUnique(memberIn(state, event.memberH).itemIds, event.itemId);
+      return;
+    }
+    case "DM_ADDRESS": {
+      if (memberH === null) return reject(state);
+      memberIn(state, memberH).dmUserId = event.telegramUserId;
       return;
     }
     case "MANAGER_NOTE": {

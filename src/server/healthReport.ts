@@ -23,7 +23,7 @@ export interface HealthInputs {
   readonly bootedAt: string | null;
   readonly bootSummary: string;
   readonly bots: readonly BotHealth[];
-  readonly queue: WriteCounts & { readonly depth: number; readonly paused: boolean; readonly closed: boolean };
+  readonly queue: WriteCounts & { readonly depth: number; readonly paused: boolean; readonly closed: boolean; readonly pauses: number };
   readonly lastWrite: LastWrite | null;
   readonly unclassifiedHeld: number;
   readonly unclassifiedDropped: number;
@@ -61,6 +61,7 @@ export function buildHealthResponse(inputs: HealthInputs): HealthResponse {
         saved: inputs.queue.saved,
         failed: inputs.queue.failed,
         paused: inputs.queue.paused,
+        rateLimitPauses: inputs.queue.pauses,
         acceptingWrites: !inputs.queue.closed,
       },
       lastWrite: inputs.lastWrite,

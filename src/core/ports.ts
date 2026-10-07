@@ -6,6 +6,7 @@ export interface IdSource {
   newItemId(): string;
   newThemeId(): string;
   newPromiseId(): string;
+  newAnswerId(): string;
 }
 
 export const systemClock: Clock = { now: () => new Date() };
@@ -26,10 +27,12 @@ export function countingIds(prefix = ""): IdSource {
   let items = 0;
   let themes = 0;
   let promises = 0;
+  let answers = 0;
   return {
     newItemId: () => `${prefix}i${(items += 1)}`,
     newThemeId: () => `${prefix}t${(themes += 1)}`,
     newPromiseId: () => `${prefix}p${(promises += 1)}`,
+    newAnswerId: () => `${prefix}a${(answers += 1)}`,
   };
 }
 

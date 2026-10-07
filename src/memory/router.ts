@@ -22,6 +22,10 @@ export class NamespaceRouter implements MemoryPort {
     return this.portFor(namespace).recallNamespace(namespace, limit);
   }
 
+  async search(namespace: string, query: string, limit: number, maxDistance: number): Promise<Result<NamespaceRecall>> {
+    return this.portFor(namespace).search(namespace, query, limit, maxDistance);
+  }
+
   async namespacesWithPrefix(prefix: string): Promise<Result<readonly string[]>> {
     return this.#community.namespacesWithPrefix(prefix);
   }

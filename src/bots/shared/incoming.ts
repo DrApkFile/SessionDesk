@@ -12,11 +12,12 @@ export interface IncomingMessage {
   readonly mentionsBot: boolean;
   readonly replyToUserId: number | null;
   readonly replyToIsBot: boolean;
+  readonly replyToText: string | null;
 }
 
 export type BotAction =
   | { readonly kind: "silent"; readonly reason: string }
-  | { readonly kind: "reply"; readonly text: string; readonly offerConsent: boolean };
+  | { readonly kind: "reply"; readonly text: string; readonly offerConsent: boolean; readonly pin?: boolean };
 
 export function silent(reason: string): BotAction {
   return { kind: "silent", reason };
@@ -24,6 +25,10 @@ export function silent(reason: string): BotAction {
 
 export function reply(text: string, offerConsent = false): BotAction {
   return { kind: "reply", text, offerConsent };
+}
+
+export function pinnedNotice(text: string): BotAction {
+  return { kind: "reply", text, offerConsent: true, pin: true };
 }
 
 export function isCommand(text: string): boolean {
@@ -43,3 +48,7 @@ export function isPrivate(message: IncomingMessage): boolean {
 }
 
 export type MemberAction = BotAction;
+
+export function chatLabel(message: IncomingMessage): string {
+  return message.chatType === "private" ? "dm" : String(message.chatId);
+}

@@ -76,9 +76,18 @@ function planThanks(context: GateContext): readonly PlannedWrite[] {
   ];
 }
 
-interface ThemeChoice {
+export interface ThemeChoice {
   readonly themeId: string;
   readonly created: GateDraft | null;
+}
+
+export function themeFor(rawLabel: string | undefined, themes: readonly ThemeRecord[], ids: IdSource): Result<ThemeChoice> {
+  const label = themeLabelFor(rawLabel);
+  const matched = matchTheme(themes, label);
+  if (matched.kind === "many") return refuse("AMBIGUOUS_TARGET", `theme label ${label} matches ${matched.count} themes`);
+  if (matched.kind === "one") return ok({ themeId: matched.value.themeId, created: null });
+  const themeId = ids.newThemeId();
+  return ok({ themeId, created: { type: "THEME_CREATED", themeId, label } });
 }
 
 function planTheme(classification: Classification, context: GateContext): Result<ThemeChoice> {

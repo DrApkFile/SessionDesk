@@ -30,6 +30,14 @@ export function describeEvent(event: LedgerEvent): string {
       return "a manager made you an ambassador";
     case "TIER_REVOKED":
       return "a manager removed your ambassador tier";
+    case "ANSWER":
+      return `an answer was recorded for the community: ${event.answerText}`;
+    case "ANSWER_RETIRED":
+      return `answer ${event.answerId} was retired and is no longer reused`;
+    case "ITEM_AFFECTS":
+      return `you reported that ${event.itemId} affects you too`;
+    case "DM_ADDRESS":
+      return "your Telegram ID, stored encrypted so I can message you about promises";
   }
 }
 

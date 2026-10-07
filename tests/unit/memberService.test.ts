@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ERRORS } from "../../src/core/errors.js";
-import { CONSENT_IN_GROUP, CONSENT_NOTICE, HELD_FOR_CLASSIFIER, SECRET_WARNING } from "../../src/bots/member/notices.js";
+import { CONSENT_IN_GROUP, CONSENT_NOTICE, GROUP_OPTIN_PROMPT, HELD_FOR_CLASSIFIER, SECRET_WARNING } from "../../src/bots/member/notices.js";
 import { GROUP_CHAT_ID, SECRET_PHRASE, harness } from "../support/memberHarness.js";
 
 const MEMBER = 42_000_001;
@@ -15,10 +15,11 @@ describe("F13 nothing is stored about a member who has not agreed", () => {
     expect(field.memory.writeCalls).toHaveLength(0);
   });
 
-  it("offers the consent notice when mentioned in the group, and still stores nothing", async () => {
+  it("offers the opt-in buttons when mentioned in the group, and still stores nothing", async () => {
     const field = harness({ classification: '{"kind":"bug"}' });
     const action = await field.service.handle(field.message({ text: "@sdmemberbot android login fails", mentionsBot: true }));
-    expect(action).toEqual({ kind: "reply", text: CONSENT_IN_GROUP, offerConsent: false });
+    expect(action).toEqual({ kind: "reply", text: GROUP_OPTIN_PROMPT, offerConsent: true });
+    expect(action.kind === "reply" && action.text).toContain("cannot be deleted once written");
     expect(field.cache.size()).toBe(0);
   });
 
@@ -38,7 +39,17 @@ describe("F13 nothing is stored about a member who has not agreed", () => {
     expect(field.cache.state().members.get(memberH)?.consented).toBe(true);
     expect(field.cache.state().members.get(memberH)?.dmConsent).toBe(true);
     expect(field.service.recordConsent(MEMBER, MEMBER, 3, "storage").kind).toBe("reply");
-    expect(field.cache.memoriesOf(memberH)).toHaveLength(1);
+    const kinds = field.cache.memoriesOf(memberH).map((heldLine) => heldLine.event.type);
+    expect(kinds).toEqual(["CONSENT_GIVEN", "DM_ADDRESS"]);
+    expect(field.cache.state().members.get(memberH)?.dmUserId).toBe(MEMBER);
+  });
+
+  it("stores no DM address for a member who agreed only to storage", () => {
+    const field = harness();
+    field.service.recordConsent(MEMBER, MEMBER, 2, "storage");
+    const memberH = field.service.memberHashOf(MEMBER);
+    expect(field.cache.memoriesOf(memberH).map((heldLine) => heldLine.event.type)).toEqual(["CONSENT_GIVEN"]);
+    expect(field.cache.state().members.get(memberH)?.dmUserId).toBeNull();
   });
 });
 

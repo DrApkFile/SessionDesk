@@ -1,16 +1,18 @@
 import { Bot, InlineKeyboard, type Context } from "grammy";
 import type { Log } from "../shared/log.js";
-import { requirePrivacyDisabled, type BotIdentity, type CommunityChat } from "../shared/startup.js";
+import { requirePrivacyDisabled, type BotHandle, type BotIdentity, type CommunityChat } from "../shared/startup.js";
 import { CHAT_TYPES, type ChatType, type IncomingMessage, type MemberAction } from "../shared/incoming.js";
-import { CONSENT_SCOPES, type ConsentScope } from "./notices.js";
+import { CONSENT_SCOPES, dmStartLink, type ConsentScope } from "./notices.js";
 import type { MemberService } from "./service.js";
 
 export const CONSENT_PREFIX = "consent:";
 
-export function consentKeyboard(): InlineKeyboard {
+export function consentKeyboard(botUsername: string): InlineKeyboard {
   return new InlineKeyboard()
     .text("I agree", `${CONSENT_PREFIX}storage`)
-    .text("I agree + DMs", `${CONSENT_PREFIX}storage_and_dm`);
+    .text("I agree + DMs", `${CONSENT_PREFIX}storage_and_dm`)
+    .row()
+    .url("Open DMs with me", dmStartLink(botUsername));
 }
 
 function chatTypeOf(raw: string): ChatType {
@@ -44,16 +46,22 @@ export function toIncoming(context: Context, identity: BotIdentity): IncomingMes
     mentionsBot: readMention(text, entities, identity.username) || replyTo?.from?.id === identity.id,
     replyToUserId: replyTo?.from?.id ?? null,
     replyToIsBot: replyTo?.from?.is_bot ?? false,
+    replyToText: replyTo?.text ?? replyTo?.caption ?? null,
   };
 }
 
-async function send(context: Context, action: MemberAction): Promise<void> {
+async function send(context: Context, action: MemberAction, self: BotHandle, log: Log): Promise<void> {
   if (action.kind === "silent") return;
-  if (action.offerConsent) {
-    await context.reply(action.text, { reply_markup: consentKeyboard() });
-    return;
+  const sent = action.offerConsent
+    ? await context.reply(action.text, { reply_markup: consentKeyboard(self.username) })
+    : await context.reply(action.text);
+  if (action.pin !== true) return;
+  try {
+    await context.api.pinChatMessage(sent.chat.id, sent.message_id, { disable_notification: true });
+    log.say("optin_pinned", { chat: String(sent.chat.id) });
+  } catch (error) {
+    log.say("optin_pin_failed", { chat: String(sent.chat.id), detail: String(error instanceof Error ? error.message : error).slice(0, 160) });
   }
-  await context.reply(action.text);
 }
 
 function scopeOf(data: string): ConsentScope | null {
@@ -66,10 +74,11 @@ export interface MemberBot {
   readonly identity: BotIdentity;
 }
 
-export async function buildMemberBot(token: string, service: MemberService, log: Log, chat: CommunityChat): Promise<MemberBot> {
+export async function buildMemberBot(token: string, service: MemberService, log: Log, chat: CommunityChat, self: BotHandle): Promise<MemberBot> {
   const bot = new Bot(token);
   const me = await bot.api.getMe();
   const identity: BotIdentity = { id: me.id, username: me.username, canReadAllGroupMessages: me.can_read_all_group_messages };
+  self.username = me.username;
   log.say("identity", { username: identity.username, id: identity.id, canReadAllGroupMessages: identity.canReadAllGroupMessages });
 
   const privacy = requirePrivacyDisabled(identity);
@@ -84,7 +93,7 @@ export async function buildMemberBot(token: string, service: MemberService, log:
   bot.on("message", async (context) => {
     const incoming = toIncoming(context, identity);
     if (incoming === null) return;
-    await send(context, await service.handle(incoming));
+    await send(context, await service.handle(incoming), self, log);
   });
 
   bot.callbackQuery(new RegExp(`^${CONSENT_PREFIX}`), async (context) => {
@@ -94,9 +103,18 @@ export async function buildMemberBot(token: string, service: MemberService, log:
       await context.answerCallbackQuery();
       return;
     }
-    const action = service.recordConsent(from.id, context.chat?.id ?? from.id, context.callbackQuery.message?.message_id ?? 0, scope);
-    await context.answerCallbackQuery();
-    await send(context, action);
+    const outcome = service.consentFromTap({
+      userId: from.id,
+      chatId: context.chat?.id ?? from.id,
+      chatType: chatTypeOf(context.chat?.type ?? "private"),
+      messageId: context.callbackQuery.message?.message_id ?? 0,
+      scope,
+    });
+    if (outcome.ignored) {
+      await context.answerCallbackQuery();
+      return;
+    }
+    await context.answerCallbackQuery({ text: outcome.alert, show_alert: true });
   });
 
   bot.catch((error) => {

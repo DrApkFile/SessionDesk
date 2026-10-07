@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
+import { delegateKeyToPublicKey, delegateKeyToSuiAddress } from "@mysten-incubation/memwal";
 import { loadConfig } from "../src/config.js";
 import { BudgetGovernor } from "../src/core/budget.js";
 import { systemClock } from "../src/core/ports.js";
@@ -9,7 +10,7 @@ import { MemwalAdapter } from "../src/memory/memwalAdapter.js";
 import { createMemwalClient } from "../src/memory/memwalClient.js";
 import type { MemoryPort } from "../src/memory/port.js";
 import { createNotesMemory } from "../src/bots/manager/notes.js";
-import { A06_MIN_MEMBERS, A06_MIN_MEMORIES, aggregateNamespace, publicEvidence, summarise, type NamespaceEvidence } from "../src/evidence/aggregate.js";
+import { A06_MIN_MEMBERS, A06_MIN_MEMORIES, aggregateNamespace, labelOf, publicEvidence, summarise, type NamespaceEvidence } from "../src/evidence/aggregate.js";
 
 const loaded = loadConfig(process.env);
 if (!loaded.ok) {
@@ -22,6 +23,8 @@ const runId = randomBytes(4).toString("hex");
 const startedAt = new Date();
 const commit = execFileSync("git", ["rev-parse", "--short", "HEAD"], { encoding: "utf8" }).trim();
 const prefix = `sd-${config.community.key}-`;
+const agentPublicKey = `0x${Buffer.from(await delegateKeyToPublicKey(config.memwal.accountA.privateKey)).toString("hex")}`;
+const agentSuiAddress = await delegateKeyToSuiAddress(config.memwal.accountA.privateKey);
 
 async function readAccount(port: MemoryPort, label: string): Promise<{ namespaces: NamespaceEvidence[]; failures: string[] }> {
   const listed = await port.namespacesWithPrefix(prefix);
@@ -55,6 +58,7 @@ const community = new MemwalAdapter(
 const notes = createNotesMemory({ serverUrl: config.memwal.serverUrl, accountB: config.memwal.accountB, communityKey: config.community.key }, systemClock);
 
 console.log(`evidence run=${runId} commit=${commit} date=${startedAt.toISOString()} prefix=${prefix}`);
+console.log(`agent id (account A delegate public key): ${agentPublicKey}`);
 console.log("account A (community memory):");
 const accountA = await readAccount(community, "account A");
 console.log("account B (manager notes):");
@@ -79,6 +83,9 @@ const provenance = {
 
 const blobCount = {
   ...provenance,
+  agentId: agentPublicKey,
+  agentIdNote: "account A delegate Ed25519 public key, the value the submission form calls MEMWAL_AGENT_ID",
+  agentSuiAddress,
   agentAccountId: config.memwal.accountA.accountId,
   notesAccountId: config.memwal.accountB.accountId,
   blobsOnAccountA: totalBlobsA,
@@ -87,7 +94,8 @@ const blobCount = {
   namespacesOnAccountA: accountA.namespaces.length,
   namespacesOnAccountB: accountB.namespaces.length,
   namespacesUnreadable: [...accountA.failures, ...accountB.failures],
-  byNamespace: accountA.namespaces.map((found) => ({ label: publicEvidence(found).label, kind: found.kind, blobs: found.blobIds.length })),
+  byNamespace: accountA.namespaces.map((found) => ({ label: labelOf(found), namespace: found.namespace, kind: found.kind, blobs: found.blobIds.length })),
+  everyBlob: accountA.namespaces.flatMap((found) => publicEvidence(found).blobs),
 };
 
 const users = {
@@ -108,7 +116,9 @@ writeFileSync("evidence/A06-users.json", `${JSON.stringify(users, null, 2)}\n`);
 console.log("");
 console.log(`A05 blobs: account A ${totalBlobsA}, account B ${totalBlobsB}, total ${totalBlobsA + totalBlobsB}`);
 console.log(`A06 members with >=${A06_MIN_MEMORIES} memories: ${summary.membersMeetingThreshold} of ${summary.membersWithAnyMemory} (need ${A06_MIN_MEMBERS}) -> ${summary.met ? "MET" : "NOT MET"}`);
-for (const found of members) console.log(`  member ${found.memberCode}: ${found.memories} memories across ${found.activeDays.length} day(s) ${found.activeDays.join(",")}`);
+for (const found of members) {
+  console.log(`  member ${found.memberCode}: ${found.memories} memories, ${found.activeDays.length} day(s) ${found.activeDays.join(",")}, first ${found.firstSeen ?? "none"} last ${found.lastSeen ?? "none"}`);
+}
 console.log(`distinct days with activity: ${summary.distinctDaysAcross.join(",") || "none"}`);
 if (accountA.failures.length + accountB.failures.length > 0) console.log(`namespaces that could not be read: ${[...accountA.failures, ...accountB.failures].join("; ")}`);
 console.log("written: evidence/A05-blobcount.json, evidence/A06-users.json");

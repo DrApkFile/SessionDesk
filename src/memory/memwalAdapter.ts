@@ -3,6 +3,7 @@ import type { ErrorCode } from "../core/errors.js";
 import { maskSecrets } from "../core/redactor.js";
 import { refuse, ok, type Refusal, type Result } from "../core/result.js";
 import { LEDGER_RECALL_QUERY, NAMESPACE_PAGE_LIMIT } from "../core/tuning.js";
+import { isRateLimited, relayerStatus, retryAfterMs } from "./relayerError.js";
 import type { MemoryPort, MemoryWrite, NamespaceRecall, StoredMemory } from "./port.js";
 
 export interface MemWalLike {
@@ -11,8 +12,8 @@ export interface MemWalLike {
     namespace?: string,
     opts?: { pollIntervalMs?: number; timeoutMs?: number; idempotencyKey?: string },
   ): Promise<{ blob_id: string; namespace: string }>;
-  recall(params: { query: string; limit?: number; namespace?: string; sort?: "relevance" | "recent" }): Promise<{
-    results: Array<{ blob_id: string; text: string; created_at?: string }>;
+  recall(params: { query: string; limit?: number; namespace?: string; sort?: "relevance" | "recent"; maxDistance?: number }): Promise<{
+    results: Array<{ blob_id: string; text: string; created_at?: string; distance?: number }>;
     total: number;
     dropped_count?: number;
   }>;
@@ -29,7 +30,12 @@ export function describeFailure(error: unknown): string {
 }
 
 function failed(code: ErrorCode, error: unknown): Refusal {
-  return refuse(code, describeFailure(error));
+  if (isRateLimited(error)) {
+    const wait = retryAfterMs(error);
+    const detail = `relayer rate limit (429)${wait === null ? "" : `, retry after ${wait} ms`}: ${describeFailure(error)}`;
+    return wait === null ? refuse("BUDGET_EXHAUSTED", detail) : refuse("BUDGET_EXHAUSTED", detail, wait);
+  }
+  return refuse(code, `status=${relayerStatus(error) ?? "none"} ${describeFailure(error)}`);
 }
 
 export class MemwalAdapter implements MemoryPort {
@@ -67,6 +73,24 @@ export class MemwalAdapter implements MemoryPort {
         text: result.text,
         blobId: result.blob_id,
         createdAt: result.created_at ?? null,
+        distance: result.distance ?? null,
+      }));
+      return ok({ namespace, lines, droppedCount: recalled.dropped_count ?? 0, atLimit: lines.length >= limit });
+    } catch (error) {
+      return failed("MEMORY_UNAVAILABLE", error);
+    }
+  }
+
+  async search(namespace: string, query: string, limit: number, maxDistance: number): Promise<Result<NamespaceRecall>> {
+    const charged = this.#budget.spend("recall");
+    if (!charged.ok) return charged;
+    try {
+      const recalled = await this.#client.recall({ query, limit, namespace, maxDistance });
+      const lines = recalled.results.map((result) => ({
+        text: result.text,
+        blobId: result.blob_id,
+        createdAt: result.created_at ?? null,
+        distance: result.distance ?? null,
       }));
       return ok({ namespace, lines, droppedCount: recalled.dropped_count ?? 0, atLimit: lines.length >= limit });
     } catch (error) {

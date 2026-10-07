@@ -35,7 +35,8 @@ export class BudgetGovernor {
     this.#forget(at);
     const used = this.#used();
     if (used + points > this.#limit) {
-      return refuse("BUDGET_EXHAUSTED", `retry after ${this.retryAfterMs(operation, at)} ms`);
+      const wait = this.retryAfterMs(operation, at);
+      return refuse("BUDGET_EXHAUSTED", `retry after ${wait} ms`, wait);
     }
     this.#charges.push({ at, points });
     const usedInWindow = used + points;

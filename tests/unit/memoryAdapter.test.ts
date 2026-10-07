@@ -57,7 +57,7 @@ describe("the memwal adapter", () => {
     });
     const recalled = await adapter.recallNamespace("sd-c1-items", 100);
     expect(recalled.ok && recalled.value.droppedCount).toBe(3);
-    expect(recalled.ok && recalled.value.lines[0]).toEqual({ text: "SD1|a", blobId: "b1", createdAt: "2026-10-07T09:00:00Z" });
+    expect(recalled.ok && recalled.value.lines[0]).toEqual({ text: "SD1|a", blobId: "b1", createdAt: "2026-10-07T09:00:00Z", distance: null });
     expect(recalled.ok && recalled.value.atLimit).toBe(false);
   });
 

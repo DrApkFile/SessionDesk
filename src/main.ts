@@ -27,6 +27,7 @@ import { buildManagerBot } from "./bots/manager/telegram.js";
 import { MemberDirectory } from "./bots/shared/directory.js";
 import { NamespaceRouter } from "./memory/router.js";
 import { PollingSupervisor, type Pollable } from "./bots/shared/polling.js";
+import { FollowUpScheduler } from "./bots/shared/followUpScheduler.js";
 import type { LastWrite } from "./server/healthReport.js";
 import { startHealthServer } from "./server/httpServer.js";
 
@@ -101,6 +102,7 @@ const queue = new WriteQueue(
 const seq = new SeqAllocator(seqStart);
 const pipeline = new EventPipeline(seq, (namespace) => (namespace === notes.namespace ? notesCache : cache), queue, config.community.key);
 const chat = new CommunityChat(config.telegram.communityChatId);
+const self = { username: "" };
 const gemini = new GeminiModel(config.gemini, realSleep, fetch);
 const groq = new GroqModel(config.groq, realSleep, fetch);
 const classifier = new Classifier(gemini, groq, systemClock);
@@ -127,6 +129,9 @@ const service = new MemberService({
   chat,
   ids: randomIds(),
   directory,
+  memory,
+  managerIds: config.telegram.managerIds,
+  self,
 });
 
 member = service;
@@ -149,12 +154,14 @@ const managerService = new ManagerService(
         seqNext: seq.peek(),
         queueDepth: queue.depth(),
         queuePaused: String(queue.paused()),
+        queueRateLimitPauses: queue.pauses(),
         unclassifiedHeld: pending.waiting(),
         unclassifiedDropped: pending.dropped(),
         communityPointsUsedThisHour: communityBudget.usedInWindow(),
         communityPointsLeft: communityBudget.remaining(),
         notesPointsUsedThisHour: notes.budget.usedInWindow(),
         membersSeenSinceBoot: directory.size(),
+        followUpChecks: followUps.ticks(),
         bootSummary: describeBoot(booted.value),
         notesBootSummary: describeBoot(bootedNotes.value),
       }),
@@ -163,7 +170,7 @@ const managerService = new ManagerService(
   config.community.namespaceSecret,
 );
 
-const memberBot = await buildMemberBot(config.telegram.memberBotToken, service, log.child("member"), chat);
+const memberBot = await buildMemberBot(config.telegram.memberBotToken, service, log.child("member"), chat, self);
 const managerBot = await buildManagerBot(config.telegram.managerBotToken, managerService, log.child("manager"));
 
 const group = await memberBot.bot.api.getChat(config.telegram.communityChatId).catch((error: unknown) => {
@@ -200,6 +207,21 @@ const supervisors = [
   new PollingSupervisor(pollable("manager", managerBot.bot), realSleep, systemClock, log.child("manager")),
 ];
 
+const followUps = new FollowUpScheduler({
+  cache,
+  directory,
+  managerIds: config.telegram.managerIds,
+  clock: systemClock,
+  log: log.child("followups"),
+  toManager: async (chatId, text) => {
+    await managerBot.bot.api.sendMessage(chatId, text);
+  },
+  toMember: async (chatId, text) => {
+    await memberBot.bot.api.sendMessage(chatId, text);
+  },
+});
+followUps.start();
+
 const server = startHealthServer(
   config.port,
   () => ({
@@ -214,7 +236,7 @@ const server = startHealthServer(
       conflicts: supervisor.conflicts(),
       pollingSince: supervisor.pollingSince(),
     })),
-    queue: { ...queue.counts(), depth: queue.depth(), paused: queue.paused(), closed: queue.closed() },
+    queue: { ...queue.counts(), depth: queue.depth(), paused: queue.paused(), closed: queue.closed(), pauses: queue.pauses() },
     lastWrite,
     unclassifiedHeld: pending.waiting(),
     unclassifiedDropped: pending.dropped(),
@@ -229,6 +251,7 @@ async function stop(signal: string): Promise<void> {
   if (stopping) return;
   stopping = true;
   log.say("stopping", { signal, queue: queue.depth(), unclassifiedHeld: pending.waiting() });
+  followUps.stop();
   await Promise.all(supervisors.map((supervisor) => supervisor.stop()));
   queue.close();
   const drained = await queue.drain(SHUTDOWN_DRAIN_SECONDS * 1000);

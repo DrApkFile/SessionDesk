@@ -15,6 +15,7 @@ export interface RecalledLine {
   readonly text: string;
   readonly blobId: string;
   readonly createdAt: string | null;
+  readonly distance: number | null;
 }
 
 export interface NamespaceRecall {
@@ -27,5 +28,6 @@ export interface NamespaceRecall {
 export interface MemoryPort {
   remember(write: MemoryWrite, timeoutMs: number): Promise<Result<StoredMemory>>;
   recallNamespace(namespace: string, limit: number): Promise<Result<NamespaceRecall>>;
+  search(namespace: string, query: string, limit: number, maxDistance: number): Promise<Result<NamespaceRecall>>;
   namespacesWithPrefix(prefix: string): Promise<Result<readonly string[]>>;
 }

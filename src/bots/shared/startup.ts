@@ -1,5 +1,9 @@
 import { refuse, ok, type Result } from "../../core/result.js";
 
+export interface BotHandle {
+  username: string;
+}
+
 export interface BotIdentity {
   readonly id: number;
   readonly username: string;

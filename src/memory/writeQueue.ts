@@ -1,6 +1,6 @@
 import type { ErrorCode } from "../core/errors.js";
 import { systemClock, type Clock, type Sleep } from "../core/ports.js";
-import { BUDGET_PAUSE_RECHECK_MS, DRAIN_POLL_MS, WRITE_ATTEMPTS, WRITE_PAUSE_LIMIT, WRITE_RETRY_BACKOFF_MS, WRITE_TIMEOUT_MS } from "../core/tuning.js";
+import { BUDGET_PAUSE_RECHECK_MS, DRAIN_POLL_MS, WRITE_ATTEMPTS, WRITE_RETRY_BACKOFF_MS, WRITE_TIMEOUT_MS } from "../core/tuning.js";
 import type { MemoryPort } from "./port.js";
 
 export const WRITE_STATES = ["saving", "saved", "failed"] as const;
@@ -49,6 +49,7 @@ export class WriteQueue {
   #saved = 0;
   #failed = 0;
   #refused = 0;
+  #pauses = 0;
 
   constructor(memory: MemoryPort, sleep: Sleep, listener: WriteListener, clock: Clock = systemClock) {
     this.#memory = memory;
@@ -102,6 +103,10 @@ export class WriteQueue {
     return this.#paused;
   }
 
+  pauses(): number {
+    return this.#pauses;
+  }
+
   async settled(): Promise<void> {
     while (this.#runner !== null) await this.#runner;
   }
@@ -119,12 +124,16 @@ export class WriteQueue {
       if (job === undefined) return;
       this.#inFlight = job;
       await this.#writeOne(job);
+      if (job.state === "saving") {
+        this.#pending.unshift(job);
+        this.#inFlight = null;
+        return;
+      }
       this.#inFlight = null;
     }
   }
 
   async #writeOne(job: WriteJob): Promise<void> {
-    let pauses = 0;
     for (;;) {
       const written = await this.#memory.remember(
         { namespace: job.namespace, text: job.text, idempotencyKey: job.idempotencyKey },
@@ -135,14 +144,11 @@ export class WriteQueue {
         return;
       }
       if (written.code === "BUDGET_EXHAUSTED") {
-        pauses += 1;
-        if (pauses > WRITE_PAUSE_LIMIT) {
-          this.#settle(job, "failed", null, "BUDGET_EXHAUSTED");
-          return;
-        }
+        this.#pauses += 1;
         this.#paused = true;
-        await this.#sleep(BUDGET_PAUSE_RECHECK_MS);
+        await this.#sleep(written.retryAfterMs ?? BUDGET_PAUSE_RECHECK_MS);
         this.#paused = false;
+        if (this.#closed) return;
         continue;
       }
       job.attempts += 1;

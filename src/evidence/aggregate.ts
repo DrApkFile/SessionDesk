@@ -1,6 +1,7 @@
 import { decode } from "../core/codec.js";
 import { memberHashFromNamespace, namespaceKindOf, type NamespaceKind } from "../core/namespace.js";
 import type { RecalledLine } from "../memory/port.js";
+import { walruscanBlobUrl } from "./links.js";
 
 export const A06_MIN_MEMBERS = 3;
 export const A06_MIN_MEMORIES = 10;
@@ -19,17 +20,23 @@ export interface NamespaceEvidence {
   readonly blobIds: readonly string[];
 }
 
+export interface BlobReceipt {
+  readonly id: string;
+  readonly walruscan: string;
+}
+
 export interface PublicEvidence {
   readonly label: string;
+  readonly namespace: string;
   readonly kind: NamespaceKind;
   readonly memberCode: string | null;
   readonly memories: number;
   readonly undecodable: number;
+  readonly firstActivity: string | null;
+  readonly lastActivity: string | null;
   readonly activeDays: readonly string[];
-  readonly firstSeen: string | null;
-  readonly lastSeen: string | null;
   readonly eventTypes: Readonly<Record<string, number>>;
-  readonly blobIds: readonly string[];
+  readonly blobs: readonly BlobReceipt[];
 }
 
 export function labelOf(found: NamespaceEvidence): string {
@@ -39,15 +46,16 @@ export function labelOf(found: NamespaceEvidence): string {
 export function publicEvidence(found: NamespaceEvidence): PublicEvidence {
   return {
     label: labelOf(found),
+    namespace: found.namespace,
     kind: found.kind,
     memberCode: found.memberCode,
     memories: found.memories,
     undecodable: found.undecodable,
+    firstActivity: found.firstSeen,
+    lastActivity: found.lastSeen,
     activeDays: found.activeDays,
-    firstSeen: found.firstSeen,
-    lastSeen: found.lastSeen,
     eventTypes: found.eventTypes,
-    blobIds: found.blobIds,
+    blobs: found.blobIds.map((id) => ({ id, walruscan: walruscanBlobUrl(id) })),
   };
 }
 

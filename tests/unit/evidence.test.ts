@@ -8,7 +8,7 @@ const COMMUNITY = "c1";
 const MEMBER_A = "a".repeat(24);
 
 function line(event: LedgerEvent, blobId: string): RecalledLine {
-  return { text: encode(event), blobId, createdAt: null };
+  return { text: encode(event), blobId, createdAt: null, distance: null };
 }
 
 function question(seq: number, day: string): LedgerEvent {
@@ -43,8 +43,8 @@ describe("A06 counts saved memories per member", () => {
   it("counts a line it cannot decode as undecodable, never as a memory", () => {
     const found = aggregateNamespace(COMMUNITY, memberNamespace, [
       line(question(1, "2026-10-07"), "b1"),
-      { text: "SD9|seq=1|t=QUESTION_ASKED|themeId=t1|ts=2026-10-07T09:00:00.000Z", blobId: "b2", createdAt: null },
-      { text: "not a ledger line", blobId: "b3", createdAt: null },
+      { text: "SD9|seq=1|t=QUESTION_ASKED|themeId=t1|ts=2026-10-07T09:00:00.000Z", blobId: "b2", createdAt: null, distance: null },
+      { text: "not a ledger line", blobId: "b3", createdAt: null, distance: null },
     ]);
     expect(found.memories).toBe(1);
     expect(found.undecodable).toBe(2);
@@ -67,14 +67,28 @@ describe("A06 counts saved memories per member", () => {
     expect(summarise([items]).members).toEqual([]);
   });
 
-  it("never puts a full member hash in the evidence that gets published", () => {
+  it("identifies a member by the namespace hash and by nothing else", () => {
     const found = aggregateNamespace(COMMUNITY, memberNamespace, [line(question(1, "2026-10-07"), "b1")]);
-    expect(found.memberCode).toHaveLength(8);
     const published = JSON.stringify(publicEvidence(found));
-    expect(published).not.toContain(MEMBER_A);
-    expect(published).not.toContain(memberNamespace);
+    expect(found.memberCode).toHaveLength(8);
     expect(published).toContain('"label":"member:aaaaaaaa"');
+    expect(published).toContain(`"namespace":"${memberNamespace}"`);
     expect(published).toContain('"memories":1');
+    for (const identifier of ["42000001", "@ada", "telegram", "userId"]) expect(published).not.toContain(identifier);
+  });
+
+  it("gives every blob a walruscan link a judge can open", () => {
+    const published = publicEvidence(aggregateNamespace(COMMUNITY, memberNamespace, [line(question(1, "2026-10-07"), "blobXYZ")]));
+    expect(published.blobs).toEqual([{ id: "blobXYZ", walruscan: "https://walruscan.com/mainnet/blob/blobXYZ" }]);
+  });
+
+  it("reports when a member was first and last active", () => {
+    const published = publicEvidence(
+      aggregateNamespace(COMMUNITY, memberNamespace, [line(question(2, "2026-10-08"), "b2"), line(question(1, "2026-10-07"), "b1")]),
+    );
+    expect(published.firstActivity).toBe("2026-10-07T09:00:00.000Z");
+    expect(published.lastActivity).toBe("2026-10-08T09:00:00.000Z");
+    expect(published.activeDays).toEqual(["2026-10-07", "2026-10-08"]);
   });
 
   it("keeps the real namespace name for a shared namespace, which holds nobody's code", () => {

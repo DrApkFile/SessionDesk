@@ -1,7 +1,7 @@
 {
-  "runId": "a0ef9f92",
-  "commit": "48176a1",
-  "date": "2026-10-07T18:32:52.561Z",
+  "runId": "cd45f034",
+  "commit": "8999c27",
+  "date": "2026-10-07T20:46:35.421Z",
   "environment": "node v24.19.0 on linux",
   "network": "walrus memory mainnet",
   "serverUrl": "https://relayer.memory.walrus.xyz",
@@ -11,10 +11,40 @@
     "minMembers": 3,
     "minMemoriesEach": 10
   },
-  "membersWithAnyMemory": 0,
+  "membersWithAnyMemory": 1,
   "membersMeetingThreshold": 0,
-  "distinctDaysAcross": [],
+  "distinctDaysAcross": [
+    "2026-10-07"
+  ],
   "undecodableLines": 0,
   "met": false,
-  "members": []
+  "members": [
+    {
+      "label": "member:e86828cf",
+      "namespace": "sd-c1-m-e86828cf24568fce513e7c39",
+      "kind": "member",
+      "memberCode": "e86828cf",
+      "memories": 2,
+      "undecodable": 0,
+      "firstActivity": "2026-10-07T20:24:02.489Z",
+      "lastActivity": "2026-10-07T20:44:35.164Z",
+      "activeDays": [
+        "2026-10-07"
+      ],
+      "eventTypes": {
+        "ITEM_OPENED": 1,
+        "CONSENT_GIVEN": 1
+      },
+      "blobs": [
+        {
+          "id": "x3pDM6Yb41CThysVrS65kk7XAcjYoofehF0Z7lXcwMY",
+          "walruscan": "https://walruscan.com/mainnet/blob/x3pDM6Yb41CThysVrS65kk7XAcjYoofehF0Z7lXcwMY"
+        },
+        {
+          "id": "vMxG0AU-XnQju3-E9KsaqYT50Vu3g61uQAfgnRaiSik",
+          "walruscan": "https://walruscan.com/mainnet/blob/vMxG0AU-XnQju3-E9KsaqYT50Vu3g61uQAfgnRaiSik"
+        }
+      ]
+    }
+  ]
 }

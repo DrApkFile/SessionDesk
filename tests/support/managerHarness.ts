@@ -101,6 +101,7 @@ export function managerHarness(options: ManagerHarnessOptions = {}): ManagerHarn
     mentionsBot: true,
     replyToUserId: null,
     replyToIsBot: false,
+    replyToText: null,
     ...partial,
   });
 

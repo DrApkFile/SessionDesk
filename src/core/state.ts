@@ -1,6 +1,6 @@
 import type { LedgerEvent } from "./events.js";
 import { FIRST_TIER } from "./tier.js";
-import type { ItemKind, ItemStatus, MemberTier, ProfileField, PromiseState } from "./vocabulary.js";
+import type { AnswerSource, AnswerState, ItemKind, ItemStatus, MemberTier, ProfileField, PromiseState } from "./vocabulary.js";
 
 export interface LedgerEntry {
   readonly event: LedgerEvent;
@@ -16,6 +16,7 @@ export interface MemberFacts {
   readonly profile: Map<ProfileField, string>;
   readonly activeDays: Set<string>;
   points: number;
+  dmUserId: number | null;
   readonly itemIds: string[];
   readonly helperPairDayCounts: Map<string, number>;
   lastSeq: number;
@@ -32,6 +33,8 @@ export interface ItemFacts {
   readonly openedTs: string;
   statusSeq: number;
   statusTs: string;
+  affected: number;
+  readonly affectedBy: string[];
 }
 
 export interface PromiseRecord {
@@ -45,6 +48,18 @@ export interface PromiseRecord {
   readonly madeSeq: number;
   readonly madeTs: string;
   fulfilledTs: string | null;
+}
+
+export interface AnswerRecord {
+  readonly answerId: string;
+  readonly questionText: string | null;
+  readonly answerText: string;
+  readonly answeredBy: AnswerSource;
+  readonly themeId: string;
+  readonly seq: number;
+  readonly ts: string;
+  state: AnswerState;
+  retiredTs: string | null;
 }
 
 export interface ThemeFacts {
@@ -67,13 +82,14 @@ export interface CommunityState {
   readonly items: Map<string, ItemFacts>;
   readonly promises: Map<string, PromiseRecord>;
   readonly themes: Map<string, ThemeFacts>;
+  readonly answers: Map<string, AnswerRecord>;
   readonly notes: NoteRecord[];
   maxSeq: number;
   rejectedEvents: number;
 }
 
 export function emptyState(): CommunityState {
-  return { members: new Map(), items: new Map(), promises: new Map(), themes: new Map(), notes: [], maxSeq: 0, rejectedEvents: 0 };
+  return { members: new Map(), items: new Map(), promises: new Map(), themes: new Map(), answers: new Map(), notes: [], maxSeq: 0, rejectedEvents: 0 };
 }
 
 export function emptyMember(memberH: string): MemberFacts {
@@ -86,6 +102,7 @@ export function emptyMember(memberH: string): MemberFacts {
     profile: new Map(),
     activeDays: new Set(),
     points: 0,
+    dmUserId: null,
     itemIds: [],
     helperPairDayCounts: new Map(),
     lastSeq: 0,

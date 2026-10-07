@@ -26,6 +26,7 @@ export function toManagerIncoming(context: Context): IncomingMessage | null {
     mentionsBot: true,
     replyToUserId: replyTo?.from?.id ?? null,
     replyToIsBot: replyTo?.from?.is_bot ?? false,
+    replyToText: replyTo?.text ?? replyTo?.caption ?? null,
   };
 }
 

@@ -4,12 +4,20 @@ import { reply, type BotAction } from "../shared/incoming.js";
 import { THEME_WINDOW_DAYS } from "../../core/tuning.js";
 import type { ManagerContext, ManagerDeps } from "./deps.js";
 import { recentThemes, topHelpers } from "./summary.js";
+import { buildWeeklyFacts } from "./weekly.js";
+import { reportPrompt } from "../../models/prompts.js";
+import { reviewReply } from "../../core/replyGuard.js";
 import { findMember } from "./targets.js";
 
 export function themes(deps: ManagerDeps): BotAction {
   const found = recentThemes(deps.cache.state(), deps.clock.now());
   if (found.length === 0) return reply(`No themes in the last ${THEME_WINDOW_DAYS} days.`);
-  const lines = found.map((theme) => `${theme.label}: ${theme.itemIds.length} item(s), ${theme.questionCount} question(s)${theme.itemIds.length === 0 ? "" : ` [${theme.itemIds.join(" ")}]`}`);
+  const state = deps.cache.state();
+  const affectedIn = (itemIds: readonly string[]): number => itemIds.reduce((total, itemId) => total + (state.items.get(itemId)?.affected ?? 0), 0);
+  const lines = found.map(
+    (theme) =>
+      `${theme.label}: ${theme.itemIds.length} item(s), ${theme.questionCount} question(s), ${affectedIn(theme.itemIds)} extra member(s) affected${theme.itemIds.length === 0 ? "" : ` [${theme.itemIds.join(" ")}]`}`,
+  );
   return reply([`Themes in the last ${THEME_WINDOW_DAYS} days, busiest first:`, ...lines].join("\n"));
 }
 
@@ -25,9 +33,28 @@ export function memberCard(deps: ManagerDeps, context: ManagerContext, rest: str
   const memberH = found.value;
   const saved = deps.cache.memoriesOf(memberH).length;
   const sheet = buildFactsSheet(deps.cache.state(), memberH, deps.clock.now(), saved);
+  const state = deps.cache.state();
+  const affectedItems = [...state.items.values()].filter((item) => item.affectedBy.includes(memberH));
+  const affectedLines = affectedItems.length === 0 ? [] : [`also affected by: ${affectedItems.map((item) => `${item.itemId} (${item.status}, ${item.affected} affected)`).join(", ")}`];
   const notes = deps.notesCache.state().notes.filter((note) => note.memberH === memberH);
   const noteLines = notes.length === 0 ? ["manager notes: —"] : ["manager notes:", ...notes.map((note) => `  ${note.ts.slice(0, 10)}: ${note.text}`)];
-  return reply([`${deps.directory.label(memberH)}`, sheet.text, ...noteLines].join("\n"));
+  return reply([`${deps.directory.label(memberH)}`, sheet.text, ...affectedLines, ...noteLines].join("\n"));
+}
+
+export async function weeklyReport(deps: ManagerDeps): Promise<BotAction> {
+  const facts = buildWeeklyFacts(deps.cache.state(), deps.directory, deps.clock.now());
+  const asked = await deps.model.ask({ prompt: reportPrompt(facts), json: false });
+  if (!asked.ok) {
+    deps.log.say("report_model_failed", { code: asked.code });
+    return reply([`${ERRORS.MODEL_UNAVAILABLE.message} Here is the data it would have written from:`, "", facts].join("\n"));
+  }
+  const reviewed = reviewReply(asked.value.text, { text: facts });
+  if (!reviewed.ok) {
+    deps.log.say("report_refused", { detail: reviewed.detail ?? "", model: asked.value.model });
+    return reply([`${ERRORS.MODEL_OUTPUT_REFUSED.message} Here is the data instead:`, "", facts].join("\n"));
+  }
+  deps.log.say("report_drafted", { model: asked.value.model, chars: reviewed.value.length });
+  return reply([reviewed.value, "", "Draft only, from the counted data below. Check it before posting.", "", facts].join("\n"));
 }
 
 export function status(deps: ManagerDeps): BotAction {

@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import { FACTS_HEADER, NOTHING_RECORDED, buildFactsSheet, templateReply } from "../../src/core/factsSheet.js";
 import { reviewReply } from "../../src/core/replyGuard.js";
 import { resolve } from "../../src/core/resolver.js";
+import { buildWeeklyFacts } from "../../src/bots/manager/weekly.js";
+import { MemberDirectory } from "../../src/bots/shared/directory.js";
+import { ITEM_STATUSES } from "../../src/core/vocabulary.js";
 import { MEMBER_A, MEMBER_B, sampleLedger } from "../support/ledger.js";
 
 const now = new Date("2026-10-08T09:00:00.000Z");
@@ -63,5 +66,20 @@ describe("the reply guard", () => {
     const empty = buildFactsSheet(resolve([]), MEMBER_A, now, 0);
     expect(reviewReply("Your bug is fixed.", empty).ok).toBe(false);
     expect(reviewReply("I have nothing on record for you.", empty).ok).toBe(true);
+  });
+});
+
+describe("the weekly data cannot smuggle a status word past the reply guard", () => {
+  it("names a status only where an item actually holds it", () => {
+    const quiet = buildWeeklyFacts(resolve([]), new MemberDirectory(), now);
+    for (const status of ITEM_STATUSES) expect(quiet.toLowerCase()).not.toContain(status);
+    expect(reviewReply("Everything was verified this week.", { text: quiet }).ok).toBe(false);
+  });
+
+  it("lets a real status through once an item holds it", () => {
+    const busy = buildWeeklyFacts(resolve(sampleLedger), new MemberDirectory(), now);
+    expect(busy).toContain("status=fixed");
+    expect(reviewReply("The login bug is fixed.", { text: busy }).ok).toBe(true);
+    expect(reviewReply("The login bug is verified.", { text: busy }).ok).toBe(false);
   });
 });

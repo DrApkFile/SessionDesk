@@ -16,7 +16,7 @@ function inputs(overrides: Partial<HealthInputs> = {}): HealthInputs {
       { name: "member", polling: true, state: "polling", conflicts: 0, pollingSince: bootedAt },
       { name: "manager", polling: true, state: "polling", conflicts: 0, pollingSince: bootedAt },
     ],
-    queue: { depth: 0, pending: 0, saved: 7, failed: 0, paused: false, closed: false },
+    queue: { depth: 0, pending: 0, saved: 7, failed: 0, paused: false, closed: false, pauses: 0 },
     lastWrite: { at: bootedAt, state: "saved", namespaceKind: "member", code: null },
     unclassifiedHeld: 0,
     unclassifiedDropped: 0,
@@ -43,8 +43,8 @@ describe("GET /health", () => {
   });
 
   it("reports the queue depth and the last write result", () => {
-    const response = buildHealthResponse(inputs({ queue: { depth: 3, pending: 4, saved: 11, failed: 1, paused: true, closed: false } }));
-    expect(response.body.queue).toEqual({ depth: 3, pending: 4, saved: 11, failed: 1, paused: true, acceptingWrites: true });
+    const response = buildHealthResponse(inputs({ queue: { depth: 3, pending: 4, saved: 11, failed: 1, paused: true, closed: false, pauses: 2 } }));
+    expect(response.body.queue).toEqual({ depth: 3, pending: 4, saved: 11, failed: 1, paused: true, rateLimitPauses: 2, acceptingWrites: true });
     expect(response.body.lastWrite).toEqual({ at: bootedAt, state: "saved", namespaceKind: "member", code: null });
   });
 
@@ -63,7 +63,7 @@ describe("GET /health", () => {
   });
 
   it("says degraded once the queue has stopped accepting writes", () => {
-    const response = buildHealthResponse(inputs({ queue: { depth: 0, pending: 2, saved: 7, failed: 0, paused: false, closed: true } }));
+    const response = buildHealthResponse(inputs({ queue: { depth: 0, pending: 2, saved: 7, failed: 0, paused: false, closed: true, pauses: 0 } }));
     expect(response.body.status).toBe("degraded");
     expect(response.body.queue).toMatchObject({ acceptingWrites: false });
   });
