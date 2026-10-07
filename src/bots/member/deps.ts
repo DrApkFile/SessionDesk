@@ -1,0 +1,26 @@
+import type { Clock, IdSource } from "../../core/ports.js";
+import type { LedgerCache } from "../../memory/cache.js";
+import type { Classifier } from "../../models/classifier.js";
+import type { TextModel } from "../../models/textModel.js";
+import type { MemberDirectory } from "../shared/directory.js";
+import type { MemoryHealth } from "../shared/health.js";
+import type { Log } from "../shared/log.js";
+import type { PendingClassifications } from "../shared/pending.js";
+import type { EventPipeline } from "../shared/pipeline.js";
+import type { CommunityChat } from "../shared/startup.js";
+
+export interface MemberDeps {
+  readonly communityKey: string;
+  readonly namespaceSecret: string;
+  readonly cache: LedgerCache;
+  readonly pipeline: EventPipeline;
+  readonly health: MemoryHealth;
+  readonly classifier: Classifier;
+  readonly replyModel: TextModel;
+  readonly pending: PendingClassifications;
+  readonly clock: Clock;
+  readonly log: Log;
+  readonly chat: CommunityChat;
+  readonly ids: IdSource;
+  readonly directory: MemberDirectory;
+}

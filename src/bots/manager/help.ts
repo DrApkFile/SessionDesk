@@ -1,0 +1,18 @@
+export const MANAGER_HELP = [
+  "Manager commands:",
+  "/owed open promises, overdue first",
+  "/themes what people are raising this week",
+  "/helpers contribution points",
+  "/member @name | code | reply what I hold about one member, including manager notes",
+  "/ack <itemId> | /fixed <itemId> | /verify <itemId> | /reopen <itemId> change an item's status",
+  "/duplicate <itemId> | /wontfix <itemId> close an item without fixing it",
+  "/promise <itemId or @member> <YYYY-MM-DD> <text> promise something to a member",
+  "/done <promiseId> mark a promise kept",
+  "/note <text> a manager-only note, stored on a separate Walrus account the member bot cannot read",
+  "/notes read those notes back",
+  "/ambassador @member | /unambassador @member grant or remove the ambassador tier",
+  "/status memory, queue, budget and sequence",
+  "",
+  "An item id can be shortened as long as it still matches exactly one item.",
+  "Plain questions are answered from a summary this code builds, never from the model's own memory.",
+].join("\n");

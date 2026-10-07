@@ -1,0 +1,6 @@
+.env
+node_modules
+spike/.env
+spike/node_modules
+spike/spike-results.json
+*.log

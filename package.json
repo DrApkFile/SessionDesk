@@ -1,0 +1,31 @@
+{
+  "name": "sessiondesk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "dev": "tsx --env-file=.env src/main.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run tests/unit tests/adversarial",
+    "test:live": "tsx --env-file=.env scripts/restore-test.ts",
+    "evidence": "tsx --env-file=.env scripts/evidence.ts",
+    "check:comments": "node scripts/check-no-comments.mjs",
+    "check:env": "node scripts/check-env-not-tracked.mjs",
+    "gate": "npm run typecheck && npm run check:comments && npm run check:env && npm run test"
+  },
+  "dependencies": {
+    "@mysten-incubation/memwal": "0.1.8",
+    "@mysten/seal": "1.4.19",
+    "@mysten/sui": "2.35.0",
+    "grammy": "1.46.0",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.4",
+    "fast-check": "4.10.2",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2",
+    "vitest": "5.0.3"
+  }
+}

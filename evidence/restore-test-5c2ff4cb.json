@@ -1,0 +1,69 @@
+{
+  "runId": "5c2ff4cb",
+  "commit": "5c9eb09",
+  "date": "2026-10-07T15:40:23.527Z",
+  "environment": "node v24.19.0 on linux",
+  "network": "walrus memory mainnet",
+  "serverUrl": "https://relayer.memory.walrus.xyz",
+  "accountId": "0x4ea4e680256e9a524767782bb41ca53ecbf4829a2a709f69c8cad6712ae7efc0",
+  "communityKey": "c1rt",
+  "writes": {
+    "planned": 6,
+    "saved": 6,
+    "failed": 0,
+    "totalMs": 214098,
+    "msPerWrite": 35683
+  },
+  "blobIds": [
+    {
+      "seq": 1,
+      "namespace": "sd-c1rt-m-5331eba4c1093af6856edd12",
+      "blobId": "7W-BjW4FeW9W48RnfTDdg8TwOsBxK_Wy485HjStx46o"
+    },
+    {
+      "seq": 2,
+      "namespace": "sd-c1rt-themes",
+      "blobId": "y7rEw0rrjZKyFBEBnncwr0Qagu-yNYAzOO64swgWTnU"
+    },
+    {
+      "seq": 3,
+      "namespace": "sd-c1rt-m-5331eba4c1093af6856edd12",
+      "blobId": "5kwslfwwXUwqEugdVyh7C00q6XuPig0Ed4c_2vYuuNA"
+    },
+    {
+      "seq": 3,
+      "namespace": "sd-c1rt-items",
+      "blobId": "_zMZkabcTuc_NjH9y8UnjI0nePrVSKmsfnsN9lg8JxI"
+    },
+    {
+      "seq": 4,
+      "namespace": "sd-c1rt-items",
+      "blobId": "lUKks5WWIBSHJWqI7IL7o3lYQO6sXV4cZd8MBQUqwCQ"
+    },
+    {
+      "seq": 5,
+      "namespace": "sd-c1rt-items",
+      "blobId": "tdOrPPsGqf3NaEWBx3twoBfulwYj629LSBtIBxEiPLk"
+    }
+  ],
+  "failures": [],
+  "rebuild": {
+    "namespaces": 3,
+    "linesRead": 6,
+    "decoded": 6,
+    "undecodable": 0,
+    "dropped": 0,
+    "partialNamespaces": [],
+    "atLimitNamespaces": [],
+    "failures": [],
+    "maxSeq": 5,
+    "nextSeq": 6,
+    "complete": true,
+    "ms": 5295
+  },
+  "statusAfterRestart": "fixed",
+  "statusExpected": "fixed",
+  "memberFoundAfterRestart": true,
+  "plainRecallTopStatus": "fixed",
+  "passed": true
+}

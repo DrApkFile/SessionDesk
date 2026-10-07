@@ -1,0 +1,21 @@
+{
+  "name": "community-memory-spike",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "spike": "tsx --env-file=.env spike.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@mysten-incubation/memwal": "0.1.8",
+    "@mysten/seal": "1.4.19",
+    "@mysten/sui": "2.35.0",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.4",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2"
+  }
+}
