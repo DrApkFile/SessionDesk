@@ -11,9 +11,12 @@ export function listAnswers(deps: ManagerDeps): BotAction {
     const who = answer.answeredBy === "manager" ? "manager" : "member";
     const state = answer.state === "retired" ? "RETIRED" : "active";
     const question = answer.questionText === null ? "(question not on record)" : answer.questionText;
-    return `${answer.answerId} ${state} by ${who} on ${answer.ts.slice(0, 10)}\n   Q: ${question}\n   A: ${answer.answerText}`;
+    const votes = `helped ${answer.helpful}, did not help ${answer.unhelpful}`;
+    return `${answer.answerId} ${state} by ${who} on ${answer.ts.slice(0, 10)}, ${votes}\n   Q: ${question}\n   A: ${answer.answerText}`;
   });
-  return reply([`${answers.length} answer(s), newest first:`, ...lines, "", "Stop one being reused with /retire <answerId>."].join("\n"));
+  const unhelpful = answers.filter((answer) => answer.state === "active" && answer.unhelpful > answer.helpful);
+  const warning = unhelpful.length === 0 ? [] : ["", `${unhelpful.length} active answer(s) are voted down more than up: ${unhelpful.map((answer) => answer.answerId).join(", ")}`];
+  return reply([`${answers.length} answer(s), newest first:`, ...lines, ...warning, "", "Stop one being reused with /retire <answerId>."].join("\n"));
 }
 
 export function retire(deps: ManagerDeps, context: ManagerContext, rest: string): BotAction {

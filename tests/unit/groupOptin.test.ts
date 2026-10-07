@@ -35,10 +35,10 @@ describe("a manager posts the opt-in notice in the group", () => {
   });
 
   it("says what it remembers, where, that it is permanent, and what never to share", () => {
-    expect(GROUP_OPTIN_NOTICE).toContain("Walrus mainnet, encrypted");
+    expect(GROUP_OPTIN_NOTICE).toContain("encrypted on Walrus");
     expect(GROUP_OPTIN_NOTICE).toContain("permanent");
     expect(GROUP_OPTIN_NOTICE).toContain("cannot be deleted once written");
-    expect(GROUP_OPTIN_NOTICE).toContain("Never share a key, token, password, phone number or email");
+    expect(GROUP_OPTIN_NOTICE).toContain("Never share a key, password, phone number or email");
     expect(GROUP_OPTIN_NOTICE).toContain("/mydata");
   });
 

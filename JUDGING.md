@@ -24,6 +24,8 @@ changes, across a restart**. Not "the bot remembers you said hello".
 |---|---|---|
 | Memory survives a restart, with the **current** status | `npm run test:live` writes 6 lines to mainnet, wipes the cache, rebuilds from Walrus, and compares resolved state | `evidence/restore-test-*.json`, `passed: true` |
 | It is running and polling | `GET https://<service>/health` → 200, `status: ok`, both bots `polling: true` | live endpoint |
+| A member never sees an internal format | `npm test` walks every reply the member bot can send without a model and asserts no facts-sheet header, item id, tier label, status code, seq number or namespace appears | `tests/unit/plainLanguage.test.ts` |
+| A status is said in plain words | reported is "with the team", fixed is "fixed", and the reply guard maps those phrases back to statuses so a model cannot smuggle a wrong one through | `src/core/plainWords.ts` |
 | A member can opt in without leaving the group | A manager runs `/optin`; the pinned notice has **I agree** and **I agree + DMs**. One tap records consent under that member's namespace hash, a second tap writes nothing | `tests/unit/groupOptin.test.ts` |
 | An earlier answer is reused instead of re-answered | Ask a question the group already answered: the reply names who answered, the date and a Walruscan receipt, and asks "did this help?" | `tests/unit/answerReuse.test.ts`, `/answers` |
 | A duplicate bug is linked, not opened twice | Report something already on record: the reply gives the existing item's current status and counts you as affected | `tests/unit/answerReuse.test.ts` |
@@ -102,6 +104,10 @@ Read this honestly:
   like every other line, and never appears in a namespace name, a log line, `/status` or any
   evidence file. Turning DMs off stops it being used; the line itself stays on Walrus, and
   `/mydata` says so.
+- **A reply is tried against three models before the template.** Gemini, then
+  `GEMINI_FALLBACK_MODEL`, then Qwen on Groq. Every answer must pass the reply guard and a leak
+  check; one that fails falls through to the next model. Only when all three are gone does the
+  member get the plain template, and it says so.
 - **Answer reuse needs exactly one clear match.** Two answers within the distance threshold means
   none is reused, by design. Thresholds are in `src/core/tuning.ts`.
 - **An answer recorded from a thanked member reply has no question text**, because Telegram does

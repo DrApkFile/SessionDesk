@@ -13,6 +13,7 @@ import { WriteQueue } from "./memory/writeQueue.js";
 import { Classifier } from "./models/classifier.js";
 import { GeminiModel } from "./models/gemini.js";
 import { GroqModel } from "./models/groq.js";
+import { ReplyChain } from "./models/replyChain.js";
 import { MemoryHealth } from "./bots/shared/health.js";
 import { randomIds } from "./bots/shared/ids.js";
 import { Log } from "./bots/shared/log.js";
@@ -106,6 +107,11 @@ const self = { username: "" };
 const gemini = new GeminiModel(config.gemini, realSleep, fetch);
 const groq = new GroqModel(config.groq, realSleep, fetch);
 const classifier = new Classifier(gemini, groq, systemClock);
+const replies = new ReplyChain([
+  new GeminiModel({ ...config.gemini, fallbackModel: config.gemini.model }, realSleep, fetch),
+  new GeminiModel({ ...config.gemini, model: config.gemini.fallbackModel }, realSleep, fetch),
+  groq,
+]);
 
 let member: MemberService | null = null;
 const pending = new PendingClassifications(
@@ -122,7 +128,7 @@ const service = new MemberService({
   pipeline,
   health,
   classifier,
-  replyModel: gemini,
+  replies,
   pending,
   clock: systemClock,
   log: log.child("member"),
@@ -272,5 +278,6 @@ async function stop(signal: string): Promise<void> {
 process.once("SIGINT", () => void stop("SIGINT"));
 process.once("SIGTERM", () => void stop("SIGTERM"));
 
+log.say("reply_chain", { order: replies.names().join(" -> ") });
 log.say("ready", { bots: "member+manager", seqNext: seq.peek(), queue: queue.depth(), managers: config.telegram.managerIds.length, port: config.port });
 await Promise.all(supervisors.map((supervisor) => supervisor.run()));

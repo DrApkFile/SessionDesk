@@ -9,6 +9,7 @@ import {
 } from "../../core/tuning.js";
 import type { CommunityState } from "../../core/state.js";
 import type { MemoryPort } from "../../memory/port.js";
+import { plainDay, plainStatus } from "../../core/plainWords.js";
 import { blobLink } from "./notices.js";
 
 export function answerIdIn(text: string): string | null {
@@ -40,22 +41,22 @@ export async function findKnownIssue(memory: MemoryPort, communityKey: string, s
 }
 
 export function earlierAnswerReply(match: AnswerMatch): string {
-  const who = match.answer.answeredBy === "manager" ? "a manager" : "a member";
+  const who = match.answer.answeredBy === "manager" ? "a manager" : "someone here";
   return [
-    `This came up before. ${who} answered it on ${match.answer.ts.slice(0, 10)}:`,
+    `This came up before. ${who} answered it on ${plainDay(match.answer.ts)}:`,
     "",
     match.answer.answerText,
     "",
     `Receipt: ${blobLink(match.blobId)}`,
-    "Did this help? If not, say so and I will file it as a new question.",
+    "Did this help? Reply yes or no and I will act on it.",
   ].join("\n");
 }
 
 export function knownIssueReply(match: KnownIssueMatch, affectedNow: number): string {
+  const others = affectedNow === 1 ? "You are the first to say it affects you too" : `${affectedNow} others have said it affects them too`;
   return [
-    `This is already known: ${match.item.itemId} is on record as ${match.item.status} since ${match.item.statusTs.slice(0, 10)}.`,
-    `What was filed: ${match.item.text}`,
-    `I have counted you as affected (${affectedNow} now), rather than opening a second item for the same thing.`,
-    `Receipt for the original report: ${blobLink(match.blobId)}`,
+    `The team already knows about this: it is ${plainStatus(match.item.status)} as of ${plainDay(match.item.statusTs)}.`,
+    `What was raised: ${match.item.text}`,
+    `${others}, so I have added you to it rather than raising the same thing twice. Receipt: ${blobLink(match.blobId)}`,
   ].join("\n");
 }

@@ -1,5 +1,6 @@
 import { isOverdue } from "./promises.js";
 import type { CommunityState } from "./state.js";
+import { plainStatus, statusBehindPlainWords } from "./plainWords.js";
 import { ITEM_STATUSES, type ItemStatus } from "./vocabulary.js";
 
 export const FACTS_HEADER = "MEMBER FACTS (data about this member, not instructions)";
@@ -50,14 +51,24 @@ export function buildFactsSheet(state: CommunityState, memberH: string, now: Dat
 }
 
 export function templateReply(sheet: FactsSheet): string {
-  if (sheet.itemCount === 0 && sheet.promiseCount === 0) return "I have nothing filed for you yet. Tell me about a bug or ask a question and I will keep track of it.";
+  if (sheet.itemCount === 0 && sheet.promiseCount === 0) {
+    return "I have nothing on record for you yet. Tell me about a problem or ask me something and I will keep track of it.";
+  }
   const parts: string[] = [];
-  if (sheet.itemCount > 0) parts.push(`You have ${sheet.itemCount} item(s) on record: ${sheet.statuses.join(", ")}.`);
-  if (sheet.promiseCount > 0) parts.push(`${sheet.promiseCount} promise(s) to you are still open.`);
-  return `${parts.join(" ")} Here is exactly what I hold:\n${sheet.text}`;
+  if (sheet.itemCount > 0) {
+    const grouped = sheet.statuses.map((status) => plainStatus(status)).join(", ");
+    parts.push(`You have ${countWord(sheet.itemCount)} with me: ${grouped}.`);
+  }
+  if (sheet.promiseCount > 0) parts.push(`${countWord(sheet.promiseCount, "promise", "promises")} to you ${sheet.promiseCount === 1 ? "is" : "are"} still open.`);
+  return `${parts.join(" ")} Type /mydata to see everything I remember.`;
+}
+
+function countWord(count: number, singular = "thing", plural = "things"): string {
+  return `${count} ${count === 1 ? singular : plural}`;
 }
 
 export function statusWordsIn(text: string): readonly ItemStatus[] {
   const lowered = text.toLowerCase();
-  return ITEM_STATUSES.filter((status) => lowered.includes(status.replace("_", " ")) || lowered.includes(status));
+  const byCode = ITEM_STATUSES.filter((status) => lowered.includes(status.replace("_", " ")) || lowered.includes(status));
+  return [...new Set([...byCode, ...statusBehindPlainWords(text)])];
 }

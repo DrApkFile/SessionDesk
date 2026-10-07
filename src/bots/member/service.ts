@@ -2,11 +2,13 @@ import type { Classification } from "../../core/classification.js";
 import { ERRORS } from "../../core/errors.js";
 import { buildFactsSheet, templateReply } from "../../core/factsSheet.js";
 import { memberHash, resolveNamespace } from "../../core/namespace.js";
+import { readFeedback } from "../../core/feedbackWords.js";
 import { guardStoredText } from "../../core/redactor.js";
+import { ANSWER_FEEDBACK_WINDOW_MINUTES } from "../../core/tuning.js";
 import { clipStoredText } from "../../core/text.js";
 import { earlierAnswerReply, findEarlierAnswer, findKnownIssue, knownIssueReply } from "./reuse.js";
 import type { CommittableWrite } from "../shared/pipeline.js";
-import { reviewReply } from "../../core/replyGuard.js";
+import { internalLeakIn, reviewReply } from "../../core/replyGuard.js";
 import { planWrites, themeFor, type PlannedWrite } from "../../core/writeGate.js";
 import { replyPrompt } from "../../models/prompts.js";
 import { memberCommands } from "./commands.js";
@@ -23,6 +25,8 @@ import {
   GROUP_OPTIN_PROMPT,
   HELD_FOR_CLASSIFIER,
   SECRET_WARNING,
+  FEEDBACK_HELPFUL,
+  FEEDBACK_NOT_HELPFUL,
   TAP_ALREADY,
   tapNeedsDmStart,
   tapWelcome,
@@ -45,6 +49,7 @@ export interface TapOutcome {
 
 export class MemberService {
   readonly #deps: MemberDeps;
+  readonly #offers = new Map<string, { answerId: string; at: number }>();
 
   constructor(deps: MemberDeps) {
     this.#deps = deps;
@@ -237,6 +242,33 @@ export class MemberService {
     return { ignored: false, wrote: true, alert };
   }
 
+  #offerPending(message: IncomingMessage, memberH: string, answerId: string): void {
+    this.#offers.set(`${message.chatId}|${memberH}`, { answerId, at: this.#deps.clock.now().getTime() });
+  }
+
+  #readAnswerFeedback(message: IncomingMessage, memberH: string): MemberAction | null {
+    const key = `${message.chatId}|${memberH}`;
+    const offered = this.#offers.get(key);
+    if (offered === undefined) return null;
+    const ageMinutes = (this.#deps.clock.now().getTime() - offered.at) / 60_000;
+    if (ageMinutes > ANSWER_FEEDBACK_WINDOW_MINUTES) {
+      this.#offers.delete(key);
+      return null;
+    }
+    const reading = readFeedback(message.text);
+    if (reading === "unclear") return null;
+
+    this.#offers.delete(key);
+    const helpful = reading === "helpful";
+    this.#deps.pipeline.commit(
+      [{ draft: { type: "ANSWER_FEEDBACK", answerId: offered.answerId, helpful }, namespaces: [{ kind: "answers" }] }],
+      { chatId: message.chatId, messageId: message.messageId },
+      this.#deps.clock.now(),
+    );
+    this.#deps.log.say("answer_feedback", { memberH, answerId: offered.answerId, helpful, storedItem: false });
+    return reply(helpful ? FEEDBACK_HELPFUL : FEEDBACK_NOT_HELPFUL);
+  }
+
   async #handleTalk(message: IncomingMessage, memberH: string, partial: boolean): Promise<MemberAction> {
     const state = this.#deps.cache.state();
     const consented = state.members.get(memberH)?.consented === true;
@@ -245,6 +277,9 @@ export class MemberService {
       if (isPrivate(message)) return reply(CONSENT_NOTICE, true);
       return message.mentionsBot ? reply(GROUP_OPTIN_PROMPT, true) : silent("no consent, not mentioned");
     }
+
+    const feedback = this.#readAnswerFeedback(message, memberH);
+    if (feedback !== null) return feedback;
 
     const guarded = guardStoredText(message.text);
     if (!guarded.ok) {
@@ -313,6 +348,7 @@ export class MemberService {
       const earlier = await findEarlierAnswer(this.#deps.memory, this.#deps.communityKey, this.#deps.cache.state(), message.text);
       if (earlier !== null) {
         this.#deps.log.say("answer_reused", { answerId: earlier.answer.answerId, distance: earlier.distance, memberH });
+        this.#offerPending(message, memberH, earlier.answer.answerId);
         return this.#speak(message, earlierAnswerReply(earlier));
       }
     }
@@ -363,19 +399,27 @@ export class MemberService {
     const saved = this.#deps.cache.memoriesOf(memberH).length;
     const sheet = buildFactsSheet(this.#deps.cache.state(), memberH, this.#deps.clock.now(), saved);
     const suffix = partial ? `\n\n${ERRORS.MEMORY_PARTIAL.message}` : "";
-    if (modelDown) return reply(`${templateReply(sheet)}\n\n${ERRORS.MODEL_UNAVAILABLE.message}${suffix}`);
+    const fallback = `${ERRORS.MODEL_UNAVAILABLE.message} ${templateReply(sheet)}${suffix}`;
+    if (modelDown) return reply(fallback);
 
-    const asked = await this.#deps.replyModel.ask({ prompt: replyPrompt(sheet, message.text), json: false });
-    if (!asked.ok) {
-      this.#deps.log.say("reply_model_failed", { code: asked.code });
-      return reply(`${templateReply(sheet)}\n\n${ERRORS.MODEL_UNAVAILABLE.message}${suffix}`);
+    const answered = await this.#deps.replies.askChecked({ prompt: replyPrompt(sheet, message.text), json: false }, (text) => {
+      const reviewed = reviewReply(text, sheet);
+      if (!reviewed.ok) return { accepted: false, reason: reviewed.detail ?? reviewed.code };
+      const leak = internalLeakIn(reviewed.value);
+      return leak === null ? { accepted: true, reason: "" } : { accepted: false, reason: `leaked ${leak}` };
+    });
+
+    if (!answered.ok) {
+      this.#deps.log.say("reply_fell_back_to_template", { memberH, detail: answered.detail ?? answered.code });
+      return reply(fallback);
     }
-    const reviewed = reviewReply(asked.value.text, sheet);
-    if (!reviewed.ok) {
-      this.#deps.log.say("reply_refused", { detail: reviewed.detail ?? "", model: asked.value.model });
-      return reply(`${templateReply(sheet)}\n\n${ERRORS.MODEL_OUTPUT_REFUSED.message}${suffix}`);
-    }
-    return reply(`${reviewed.value}${suffix}`);
+    this.#deps.log.say("reply_answered", {
+      memberH,
+      answeredBy: answered.value.model,
+      attempts: answered.value.attempts,
+      tried: answered.value.tried.map((attempt) => `${attempt.model}:${attempt.outcome}`).join(" "),
+    });
+    return reply(`${answered.value.text.trim()}${suffix}`);
   }
 
   #speak(message: IncomingMessage, text: string): MemberAction {

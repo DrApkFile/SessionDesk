@@ -3,82 +3,72 @@ import { walruscanBlobUrl } from "../../evidence/links.js";
 export const CONSENT_SCOPES = ["storage", "storage_and_dm"] as const;
 export type ConsentScope = (typeof CONSENT_SCOPES)[number];
 
-export const CONSENT_NOTICE = [
-  "I am the memory for this community. Before I keep anything about you, read this.",
-  "",
-  "What I store: what you ask, bugs and feedback you file, facts you tell me about yourself (role, skills, interests, language), thanks you receive, and promises managers make to you.",
-  "Where: Walrus Memory on mainnet. Storage there is public and permanent. Your lines are encrypted, and they are filed under a code derived from your Telegram id, never under your id or name.",
-  "What I never store: keys, tokens, passwords, emails, phone numbers, addresses. If you paste one I block the message and warn you.",
-  "The honest limit: forgetting means I stop indexing your namespace. The blobs already written stay on Walrus. I cannot delete them. Nobody can.",
-  "",
-  "If you choose I agree + DMs, your Telegram ID is stored encrypted so I can message you about promises. It is never written into a namespace name, a log line or any evidence file.",
-  "",
-  "Tap I agree to let me store, or I agree + DMs if you also want me to message you when a promise to you comes due.",
-].join("\n");
-
-export const ALREADY_CONSENTED = "You have already agreed, so I am keeping your community memory. Use /mydata to see everything I hold and /help for the rest.";
-
-export const CONSENT_RECORDED = [
-  "Thank you. I will keep your community memory from now on.",
-  "/mydata shows everything I hold about you, with the Walrus receipt for each line.",
-  "/correct <number> <new value> fixes a line I got wrong.",
-].join("\n");
-
-export const DM_CONSENT_RECORDED = `${CONSENT_RECORDED}\nI will also message you here when a promise made to you comes due.`;
-
-export const HELP = [
-  "What I can do:",
-  "Ask me anything about this community and I answer from what is on record, never from a guess.",
-  "Tell me about a bug or a missing feature and I file it, then keep its current status.",
-  "Tell me about yourself (your role, a skill, a language) and I remember it.",
-  "",
-  "Commands:",
-  "/start the consent notice",
-  "/mydata everything I hold about you, with a Walrus receipt per line",
-  "/correct <number> <new value> fix one line",
-  "/help this message",
-  "",
-  "In the group I only answer when you @mention me or use a command, so I do not fill the chat.",
-].join("\n");
-
-export const CONSENT_IN_GROUP = "Message me directly and send /start, and I will show you what I store before I keep anything.";
-
-export const SECRET_WARNING = [
-  "I did not store that message: it looks like it contains a key, token, email, phone number or something else private.",
-  "Walrus storage is permanent, so I block those rather than write them.",
-  "If that was a real key or token, rotate it now, then send the message again without it.",
-].join("\n");
-
-export function blobLink(blobId: string): string {
-  return walruscanBlobUrl(blobId);
-}
-
-export const HELD_FOR_CLASSIFIER = [
-  "I have not stored that message yet: the model that reads messages is not answering.",
-  "I am holding it in memory and will file it as soon as a model answers.",
-  "If I restart before then it is lost, and I will say so rather than pretend it was saved.",
-].join("\n");
-
 export const DM_START_PAYLOAD = "dm";
 
 export function dmStartLink(botUsername: string): string {
   return `https://t.me/${botUsername}?start=${DM_START_PAYLOAD}`;
 }
 
+export function blobLink(blobId: string): string {
+  return walruscanBlobUrl(blobId);
+}
+
+export const CONSENT_NOTICE = [
+  "I am this community's memory. Before I keep anything about you, here is the deal.",
+  "",
+  "I remember what you ask, problems and ideas you raise, what you tell me about yourself, thanks you get, and promises managers make you. It is kept encrypted on Walrus, a public network, and it is permanent: I can stop looking at your memory, but a single memory cannot be deleted once written, by me or by anyone.",
+  "Never share a key, password, phone number or email here. If you do, I block the message and warn you instead of saving it.",
+  "",
+  "Tap I agree, or I agree + DMs if you also want me to message you when a promise to you is due. Either way you can type /mydata to me any time to see everything I remember, or /help for what else I can do.",
+].join("\n");
+
+export const ALREADY_CONSENTED = "You are already in. Type /mydata to see everything I remember about you, or /help for what else I can do.";
+
+export const CONSENT_RECORDED = [
+  "You're in, thank you. From now on I remember what you raise and ask.",
+  "Type /mydata any time to see everything I hold, with a receipt for each line.",
+].join("\n");
+
+export const DM_CONSENT_RECORDED = `${CONSENT_RECORDED}\nI will also message you here when a promise to you is due.`;
+
+export const HELP = [
+  "Ask me anything about this community and I answer from what I actually have on record, never from a guess.",
+  "Tell me about a problem or an idea and I pass it to the team and keep track of what happens to it.",
+  "Tell me about yourself and I remember it, so nobody has to ask twice.",
+  "",
+  "/mydata everything I remember about you, with a receipt for each line",
+  "/correct 3 new wording   fix line 3 of what /mydata shows",
+  "/help this message",
+  "",
+  "In the group I only answer when you @mention me, so I do not fill the chat.",
+].join("\n");
+
+export const CONSENT_IN_GROUP = "Message me here and send /start, and I will show you what I keep before I keep anything.";
+
+export const SECRET_WARNING = [
+  "I did not save that message: it looks like it has something private in it, like a key, a password, a phone number or an email.",
+  "Walrus storage is permanent, so I block those rather than write them down.",
+  "If that was a real key or password, change it now, then send me the message without it.",
+].join("\n");
+
+export const HELD_FOR_CLASSIFIER = [
+  "I have not saved that one yet: my AI is not answering right now.",
+  "I am holding your message and will file it as soon as it comes back.",
+  "If I restart before then it is lost, and I will tell you rather than pretend it was saved.",
+].join("\n");
+
 export const GROUP_OPTIN_NOTICE = [
   "I am this community's memory. Tap below if you want me to remember you.",
   "",
-  "What I remember: what you ask, bugs and feedback you file, what you tell me about yourself, thanks you receive, and promises managers make to you.",
-  "Where: Walrus mainnet, encrypted, filed under a code derived from your Telegram id.",
-  "The honest part: Walrus storage is permanent. I can stop indexing your memory, but a single memory cannot be deleted once written, by me or by anyone.",
-  "Never share a key, token, password, phone number or email here. If you paste one I block the message and warn you.",
+  "I remember what you ask, problems and ideas you raise, what you tell me about yourself, thanks you get, and promises managers make you. It is kept encrypted on Walrus, a public network, and it is permanent: a single memory cannot be deleted once written, by me or by anyone.",
+  "Never share a key, password, phone number or email here. If you do, I block the message and warn you.",
   "",
-  "Type /mydata to the bot at any time to see everything I hold about you, with a receipt for each line.",
+  "Once you are in, type /mydata to me and you will see everything I remember, with a receipt for each line.",
 ].join("\n");
 
 export const GROUP_OPTIN_PROMPT = [
-  "I do not store anything about you until you agree. Tap below and I will start remembering.",
-  "Walrus storage is permanent: I can stop indexing your memory, but a single memory cannot be deleted once written.",
+  "I do not keep anything about you until you say yes. Tap below and I will start remembering.",
+  "Walrus storage is permanent: I can stop looking at your memory, but a single memory cannot be deleted once written.",
 ].join("\n");
 
 export function tapWelcome(botUsername: string): string {
@@ -88,8 +78,24 @@ export function tapWelcome(botUsername: string): string {
 export const TAP_ALREADY = "You're already in.";
 
 export function tapNeedsDmStart(botUsername: string): string {
-  return `You're in. Direct messages need one more tap: open @${botUsername}, press Start, and I will message you about promises.`;
+  return `You're in. For messages from me, open @${botUsername} and press Start, then I can tell you when a promise to you is due.`;
 }
 
-export const OPTIN_PINNED = "Opt-in notice posted and pinned.";
-export const OPTIN_NOT_MANAGER = "";
+export const NOTHING_HELD = "I do not hold anything about you yet. Say yes above, then talk to me and I will keep track.";
+
+export const MYDATA_FOOTER = "If I stop looking at your memory, the lines above stay on Walrus. Nobody can delete them, including me.";
+
+export const CORRECT_USAGE = "To fix something, type /correct and the line number from /mydata, then the new wording. For example: /correct 3 I am a designer.";
+
+export function correctUnknownLine(position: number): string {
+  return `I do not have a line ${position} for you, so nothing changed. Type /mydata to see the numbers.`;
+}
+
+export const CORRECT_NOT_POSSIBLE = "That line is not one you can change, so nothing changed. You can fix something you told me about yourself, or the wording of something you raised.";
+
+export function correctDone(value: string): string {
+  return `Done, I have it as "${value}" now. It takes a moment to save; check /mydata in a minute for the receipt.`;
+}
+
+export const FEEDBACK_NOT_HELPFUL = "Thanks, I've passed your question to the team.";
+export const FEEDBACK_HELPFUL = "Good, thanks for telling me. I will keep using that answer.";

@@ -15,7 +15,7 @@ describe("error code set", () => {
 
   it("says whether anything changed for every refusal a user can trigger", () => {
     for (const code of ["NOT_CONSENTED", "NOT_MANAGER", "SECRET_BLOCKED", "INVALID_TRANSITION", "UNKNOWN_ITEM", "AMBIGUOUS_TARGET", "INVALID_DATE", "BUDGET_EXHAUSTED", "WRITE_FAILED"] as const) {
-      expect(ERRORS[code].message.toLowerCase()).toMatch(/nothing (was stored|changed)|not stored/);
+      expect(ERRORS[code].message.toLowerCase()).toMatch(/nothing (was stored|changed)|not stored|not saved/);
     }
   });
 });

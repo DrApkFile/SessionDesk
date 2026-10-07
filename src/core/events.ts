@@ -52,6 +52,7 @@ export const EVENT_PAYLOADS = {
   ANSWER_RETIRED: z.object({ answerId: identifier, byManagerId: wholeNumber.positive() }).strict(),
   ITEM_AFFECTS: z.object({ itemId: identifier, memberH: memberHash }).strict(),
   DM_ADDRESS: z.object({ telegramUserId: wholeNumber.positive() }).strict(),
+  ANSWER_FEEDBACK: z.object({ answerId: identifier, helpful: z.enum(["true", "false"]).transform((raw) => raw === "true") }).strict(),
 } satisfies Record<EventType, z.ZodObject>;
 
 export type PayloadOf<K extends EventType> = z.infer<(typeof EVENT_PAYLOADS)[K]>;

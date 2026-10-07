@@ -12,6 +12,7 @@ import { WriteQueue } from "../../src/memory/writeQueue.js";
 import { Classifier } from "../../src/models/classifier.js";
 import { GeminiModel } from "../../src/models/gemini.js";
 import { GroqModel } from "../../src/models/groq.js";
+import { ReplyChain } from "../../src/models/replyChain.js";
 import { PendingClassifications } from "../../src/bots/shared/pending.js";
 import type { FetchLike } from "../../src/models/textModel.js";
 import { FakeMemory, type FakeMemoryOptions } from "./fakeMemory.js";
@@ -27,6 +28,7 @@ export interface HarnessOptions {
   readonly modelStatus?: number;
   readonly groqStatus?: number;
   readonly groqClassification?: string;
+  readonly groqReplyText?: string;
   readonly memory?: FakeMemoryOptions;
 }
 
@@ -34,6 +36,7 @@ export interface Harness {
   readonly service: MemberService;
   readonly pending: PendingClassifications;
   readonly classifier: Classifier;
+  readonly replies: ReplyChain;
   readonly waits: number[];
   readonly directory: MemberDirectory;
   readonly cache: LedgerCache;
@@ -49,30 +52,38 @@ export interface Harness {
   classifyAs(json: string): void;
   mendModel(): void;
   breakGroq(status?: number): void;
+  breakReplyModels(status?: number): void;
+  breakGroqReplies(status?: number): void;
   advanceMinutes(minutes: number): void;
 }
 
 interface ModelState {
   status: number;
+  replyStatus: number | null;
   groqStatus: number;
+  groqReplyStatus: number | null;
   at: Date;
   classification: string;
 }
 
 function modelFetch(options: HarnessOptions, modelState: ModelState): FetchLike {
   return async (_url, init) => {
-    const status = modelState.status;
-    if (status >= 400) return { ok: false, status, text: async () => "high demand" };
     const classifying = init.body.includes("Reply with JSON only");
+    const status = classifying ? modelState.status : (modelState.replyStatus ?? modelState.status);
+    if (status >= 400) return { ok: false, status, text: async () => "high demand" };
     const text = classifying ? modelState.classification : (options.replyText ?? "Here is what I have on record for you.");
     return { ok: true, status, text: async () => JSON.stringify({ candidates: [{ content: { parts: [{ text }] } }] }) };
   };
 }
 
 function groqFetch(options: HarnessOptions, modelState: ModelState): FetchLike {
-  return async () => {
-    if (modelState.groqStatus >= 400) return { ok: false, status: modelState.groqStatus, text: async () => "groq down" };
-    const text = options.groqClassification ?? '{"kind":"feedback","themeLabel":"from groq"}';
+  return async (_url, init) => {
+    const classifying = init.body.includes("Reply with JSON only");
+    const groqStatus = classifying ? modelState.groqStatus : (modelState.groqReplyStatus ?? modelState.groqStatus);
+    if (groqStatus >= 400) return { ok: false, status: groqStatus, text: async () => "groq down" };
+    const text = classifying
+      ? (options.groqClassification ?? '{"kind":"feedback","themeLabel":"from groq"}')
+      : (options.groqReplyText ?? "Answer from the backup model.");
     return { ok: true, status: 200, text: async () => JSON.stringify({ choices: [{ message: { content: text } }] }) };
   };
 }
@@ -80,7 +91,9 @@ function groqFetch(options: HarnessOptions, modelState: ModelState): FetchLike {
 export function harness(options: HarnessOptions = {}): Harness {
   const modelState: ModelState = {
     status: options.modelStatus ?? 200,
+    replyStatus: null,
     groqStatus: options.groqStatus ?? 200,
+    groqReplyStatus: null,
     at: new Date("2026-10-08T09:00:00.000Z"),
     classification: options.classification ?? '{"kind":"chit_chat"}',
   };
@@ -104,6 +117,9 @@ export function harness(options: HarnessOptions = {}): Harness {
   const gemini = new GeminiModel({ apiKey: "AIzatestkey", model: "gemini-3.8-flash", fallbackModel: "gemini-3.5-flash" }, async () => {}, modelFetch(options, modelState));
   const groq = new GroqModel({ apiKey: "gsk_testkey", model: "qwen/qwen3.8-27b" }, async () => {}, groqFetch(options, modelState));
   const classifier = new Classifier(gemini, groq, clock);
+  const geminiPrimary = new GeminiModel({ apiKey: "AIzatestkey", model: "gemini-3.8-flash", fallbackModel: "gemini-3.8-flash" }, async () => {}, modelFetch(options, modelState));
+  const geminiBackup = new GeminiModel({ apiKey: "AIzatestkey", model: "gemini-3.5-flash", fallbackModel: "gemini-3.5-flash" }, async () => {}, modelFetch(options, modelState));
+  const replies = new ReplyChain([geminiPrimary, geminiBackup, groq]);
   let built: MemberService | null = null;
   const pending = new PendingClassifications(
     async (ms) => {
@@ -120,7 +136,7 @@ export function harness(options: HarnessOptions = {}): Harness {
     pipeline: new EventPipeline(new SeqAllocator(1), () => cache, queue, COMMUNITY),
     health,
     classifier,
-    replyModel: gemini,
+    replies,
     pending,
     clock,
     log: new Log("test", (line) => logLines.push(line)),
@@ -138,6 +154,7 @@ export function harness(options: HarnessOptions = {}): Harness {
     service,
     pending,
     classifier,
+    replies,
     waits,
     directory,
     cache,
@@ -159,6 +176,12 @@ export function harness(options: HarnessOptions = {}): Harness {
     },
     breakGroq: (status = 503) => {
       modelState.groqStatus = status;
+    },
+    breakReplyModels: (status = 503) => {
+      modelState.replyStatus = status;
+    },
+    breakGroqReplies: (status = 503) => {
+      modelState.groqReplyStatus = status;
     },
     advanceMinutes: (minutes: number) => {
       modelState.at = new Date(modelState.at.getTime() + minutes * 60_000);

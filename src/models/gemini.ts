@@ -41,7 +41,7 @@ export class GeminiModel implements TextModel {
   async ask(ask: ModelAsk): Promise<Result<ModelAnswer>> {
     let attempts = 0;
     let lastDetail = "no attempt made";
-    for (const model of [this.#settings.model, this.#settings.fallbackModel]) {
+    for (const model of [...new Set([this.#settings.model, this.#settings.fallbackModel])]) {
       for (let tries = 0; tries < MODEL_ATTEMPTS; tries += 1) {
         attempts += 1;
         const attempt = await this.#once(model, ask);

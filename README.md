@@ -8,7 +8,7 @@ private notes. Built for Walrus Sessions 8, "Chatbots That Remember".
 Build steps 1-5 of 7 done (PRD §12), plus the P1 items that matter for a real community: config,
 the pure core, the Walrus memory layer, the member bot, the manager bot, deployment, the evidence
 script, JUDGING.md, /report and the follow-up scheduler. Deployed on Render.
-`npm run gate` is green: typecheck, no-comments check, .env-not-tracked check, and 431 unit and
+`npm run gate` is green: typecheck, no-comments check, .env-not-tracked check, and 444 unit and
 adversarial tests (no network), run 2026-10-07 on Node 24.19.0 / Linux.
 The restore test has been run once against Walrus mainnet: evidence/restore-test-5c2ff4cb.json
 (6 blobs written, 35.7 s per write, cache wiped and rebuilt, status still correct).
@@ -23,7 +23,15 @@ The restore test has been run once against Walrus mainnet: evidence/restore-test
   reply guard
 - `src/memory/` MemWal adapter, background write queue with retries and budget pauses, derived
   cache, boot rebuild from Walrus
-- `src/models/gemini.ts` 503 retry then `GEMINI_FALLBACK_MODEL`, then an honest template reply
+- `src/models/gemini.ts` and `replyChain.ts`: a reply is tried on Gemini, then
+  GEMINI_FALLBACK_MODEL, then Qwen on Groq, and only then falls back to a plain template. Every
+  model's answer must pass the reply guard and a leak check, and the log says who answered
+- Everything a member reads is plain language: no ids, no tier labels, no status codes, no
+  sequence numbers. A status is "with the team", "the team is on it", "fixed", "fixed and
+  confirmed", "already known" or "won't be changed". /mydata numbers its lines and /correct takes
+  that number. A test walks every member-facing reply and fails if an internal format appears
+- Answer feedback: replying yes or no to a reused answer records it and opens nothing, and
+  /answers shows the counts so a manager can /retire an answer that is voted down
 - `src/bots/member/` consent flow, classification, write gate, replies built only from the
   code-made facts sheet, /mydata with a Walrus receipt per line, /correct, /help
 - Opt-in from the group: a manager runs /optin, the bot posts and pins a notice with I agree and

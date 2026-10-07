@@ -33,7 +33,7 @@ describe("the code-built facts sheet", () => {
     expect(empty.text).toContain(`profile: ${NOTHING_RECORDED}`);
     expect(empty.itemCount).toBe(0);
     expect(empty.statuses).toEqual([]);
-    expect(templateReply(empty)).toContain("nothing filed for you yet");
+    expect(templateReply(empty)).toContain("nothing on record for you yet");
   });
 
   it("never uses a status word in its own headings, so the guard cannot be fooled by the layout", () => {

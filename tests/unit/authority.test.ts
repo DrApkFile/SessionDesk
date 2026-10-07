@@ -11,7 +11,7 @@ describe("F11 who may create which event", () => {
     for (const type of ["ITEM_STATUS", "PROMISE_MADE", "PROMISE_FULFILLED", "MANAGER_NOTE", "TIER_SET", "TIER_REVOKED", "ANSWER_RETIRED"] as const) {
       expect(authorityOf(type)).toBe("manager_command");
     }
-    expect(eventTypesFrom("write_gate")).toEqual(["PROFILE_FACT", "QUESTION_ASKED", "ITEM_OPENED", "CONTRIBUTION", "THEME_CREATED", "ANSWER", "ITEM_AFFECTS"]);
+    expect(eventTypesFrom("write_gate")).toEqual(["PROFILE_FACT", "QUESTION_ASKED", "ITEM_OPENED", "CONTRIBUTION", "THEME_CREATED", "ANSWER", "ITEM_AFFECTS", "ANSWER_FEEDBACK"]);
   });
 
   it("leaves consent and corrections to the member's own commands", () => {

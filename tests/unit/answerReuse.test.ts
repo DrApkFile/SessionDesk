@@ -154,8 +154,9 @@ describe("a bug that is already known is linked, not opened twice", () => {
     const item = [...field.cache.state().items.values()][0];
     expect(item?.affected).toBe(1);
     expect(item?.affectedBy).toEqual([field.service.memberHashOf(MEMBER)]);
-    expect(action.kind === "reply" && action.text).toContain("already known");
-    expect(action.kind === "reply" && action.text).toContain("is on record as reported");
+    expect(action.kind === "reply" && action.text).toContain("The team already knows about this");
+    expect(action.kind === "reply" && action.text).toContain("with the team");
+    expect(action.kind === "reply" && action.text).not.toContain("status=");
     expect(action.kind === "reply" && action.text).toContain("https://walruscan.com/mainnet/blob/");
   });
 

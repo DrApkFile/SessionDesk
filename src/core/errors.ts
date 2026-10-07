@@ -25,37 +25,37 @@ export interface ErrorInfo {
 
 export const ERRORS = {
   MEMORY_UNAVAILABLE: {
-    message: "I cannot read the community memory right now, so I will not guess what I know about you. Nothing was stored.",
+    message: "I cannot reach my memory right now, so I will not guess at what I know about you. Nothing was stored.",
     retryable: true,
     nextAction: "Ask again in a minute.",
   },
   MEMORY_PARTIAL: {
-    message: "Some memories could not be read, so this answer may be incomplete.",
+    message: "I could not read some of what I hold, so this answer may be missing something.",
     retryable: true,
     nextAction: "Treat the answer as partial and ask again later for the full picture.",
   },
   WRITE_PENDING: {
-    message: "This is still being saved to Walrus.",
+    message: "This is still saving.",
     retryable: false,
-    nextAction: "Check /mydata again in a minute for the blob receipt.",
+    nextAction: "Check /mydata again in a minute for the receipt.",
   },
   WRITE_FAILED: {
-    message: "Saving this to Walrus failed after retries, so it is not stored.",
+    message: "I tried several times and could not save this, so it is not saved.",
     retryable: true,
-    nextAction: "Send the message again, or ask a manager to retry.",
+    nextAction: "Send it again, or ask a manager to look.",
   },
   BUDGET_EXHAUSTED: {
-    message: "The hourly Walrus points budget is used up, so nothing was stored.",
+    message: "I have hit my hourly saving limit, so nothing was stored just now.",
     retryable: true,
-    nextAction: "Wait for the budget window to roll over.",
+    nextAction: "Try again in a little while.",
   },
   MODEL_UNAVAILABLE: {
-    message: "The language model is unavailable, so this reply is a template. Memory was not affected.",
+    message: "Sorry, my AI is overloaded right now, so I am keeping this short.",
     retryable: true,
     nextAction: "Ask again shortly.",
   },
   MODEL_OUTPUT_REFUSED: {
-    message: "I dropped the answer the model wrote because it stated something I have no record of, so you got the plain facts instead. Nothing changed.",
+    message: "I nearly told you something I have no record of, so I am keeping this short instead. Nothing changed.",
     retryable: true,
     nextAction: "Ask again, or ask a manager if a status looks wrong.",
   },
@@ -70,17 +70,17 @@ export const ERRORS = {
     nextAction: "Ask a manager to run it.",
   },
   SECRET_BLOCKED: {
-    message: "That message looks like it contains a secret, so nothing was stored.",
+    message: "That looks like it has something private in it, so nothing was stored.",
     retryable: false,
-    nextAction: "Rotate the key or token you pasted, then send the message without it.",
+    nextAction: "Change the key or password you pasted, then send the message without it.",
   },
   INVALID_TRANSITION: {
-    message: "That status change is not allowed from the current status. Nothing changed.",
+    message: "That change is not possible from where things stand. Nothing changed.",
     retryable: false,
     nextAction: "Check the current status first.",
   },
   UNKNOWN_ITEM: {
-    message: "I have no item with that id. Nothing changed.",
+    message: "I do not have that one. Nothing changed.",
     retryable: false,
     nextAction: "Run /themes to see the current item ids.",
   },

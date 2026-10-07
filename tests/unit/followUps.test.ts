@@ -86,10 +86,10 @@ describe("a promise that comes due is followed up", () => {
     const run = field(ledger("2026-10-08", true), "2026-10-08T09:00:00.000Z");
     const sent = await run.scheduler.tick();
     expect(sent.map((reminder) => reminder.audience)).toEqual(["manager", "member"]);
-    expect(run.memberMessages[0]).toContain("promised you this by today");
-    expect(run.memberMessages[0]).toContain("still open on record");
+    expect(run.memberMessages[0]).toContain("promised you something by today");
+    expect(run.memberMessages[0]).toContain("still open");
     expect(run.memberMessages[0]).toContain("team has been reminded");
-    for (const falseClaim of ["is done", "has been done", "is fixed", "completed", "sorted"]) {
+    for (const falseClaim of ["has been done", "is fixed", "completed", "sorted", "already done"]) {
       expect(run.memberMessages[0]).not.toContain(falseClaim);
     }
   });

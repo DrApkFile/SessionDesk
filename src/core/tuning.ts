@@ -47,3 +47,5 @@ export const ANSWER_SEARCH_LIMIT = 5;
 export const KNOWN_ISSUE_MAX_DISTANCE = 0.3;
 export const KNOWN_ISSUE_SEARCH_LIMIT = 5;
 export const PLAIN_RECALL_TOP_K = 5;
+
+export const ANSWER_FEEDBACK_WINDOW_MINUTES = 30;

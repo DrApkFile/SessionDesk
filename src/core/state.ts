@@ -60,6 +60,8 @@ export interface AnswerRecord {
   readonly ts: string;
   state: AnswerState;
   retiredTs: string | null;
+  helpful: number;
+  unhelpful: number;
 }
 
 export interface ThemeFacts {

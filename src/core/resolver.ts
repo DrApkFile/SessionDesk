@@ -165,6 +165,8 @@ function apply(state: CommunityState, entry: LedgerEntry, seenBySeq: Map<number,
         ts: event.ts,
         state: "active",
         retiredTs: null,
+        helpful: 0,
+        unhelpful: 0,
       });
       return;
     }
@@ -173,6 +175,13 @@ function apply(state: CommunityState, entry: LedgerEntry, seenBySeq: Map<number,
       if (answer === undefined || answer.state !== "active") return reject(state);
       answer.state = "retired";
       answer.retiredTs = event.ts;
+      return;
+    }
+    case "ANSWER_FEEDBACK": {
+      const answer = state.answers.get(event.answerId);
+      if (answer === undefined) return reject(state);
+      if (event.helpful) answer.helpful += 1;
+      else answer.unhelpful += 1;
       return;
     }
     case "ITEM_AFFECTS": {

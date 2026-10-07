@@ -27,7 +27,7 @@ describe("F13 nothing is stored about a member who has not agreed", () => {
     const field = harness();
     const action = await field.service.handle(field.message({ chatId: MEMBER, chatType: "private", text: "hello" }));
     expect(action).toEqual({ kind: "reply", text: CONSENT_NOTICE, offerConsent: true });
-    expect(CONSENT_NOTICE).toContain("cannot delete them");
+    expect(CONSENT_NOTICE).toContain("cannot be deleted once written");
     expect(field.cache.size()).toBe(0);
   });
 
@@ -125,7 +125,7 @@ describe("F08 and F09 a model that is down or wrong changes nothing", () => {
     field.service.recordConsent(MEMBER, MEMBER, 1, "storage");
     const action = await field.service.handle(field.message({ chatId: MEMBER, chatType: "private", text: "any news on my bug?" }));
     expect(action.kind === "reply" && action.text).toContain(HELD_FOR_CLASSIFIER);
-    expect(action.kind === "reply" && action.text).toContain("nothing filed for you yet");
+    expect(action.kind === "reply" && action.text).toContain("nothing on record for you yet");
     expect(field.pending.waiting()).toBe(1);
     expect(field.logLines.join("\n")).toContain("classify_deferred");
   });
@@ -135,8 +135,10 @@ describe("F08 and F09 a model that is down or wrong changes nothing", () => {
     field.service.recordConsent(MEMBER, MEMBER, 1, "storage");
     await field.service.handle(field.message({ chatId: MEMBER, chatType: "private", messageId: 2, text: "android login fails" }));
     field.breakModel();
+    field.breakGroq();
     const action = await field.service.handle(field.message({ chatId: MEMBER, chatType: "private", messageId: 3, text: "news?" }));
-    expect(action.kind === "reply" && action.text).toContain("status=reported");
+    expect(action.kind === "reply" && action.text).toContain("with the team");
+    expect(action.kind === "reply" && action.text).not.toContain("status=");
     expect(action.kind === "reply" && action.text).toContain(HELD_FOR_CLASSIFIER);
   });
 
@@ -148,13 +150,17 @@ describe("F08 and F09 a model that is down or wrong changes nothing", () => {
     expect(field.logLines.join("\n")).toContain("classify_refused");
   });
 
-  it("drops a reply that claims a status it has no record of", async () => {
-    const field = harness({ classification: '{"kind":"question","themeLabel":"login"}', replyText: "Good news, that bug is verified and closed." });
+  it("drops a reply that claims a status it has no record of, from every model in the chain", async () => {
+    const field = harness({
+      classification: '{"kind":"question","themeLabel":"login"}',
+      replyText: "Good news, that bug is verified and closed.",
+      groqReplyText: "It is verified and closed.",
+    });
     field.service.recordConsent(MEMBER, MEMBER, 1, "storage");
     const action = await field.service.handle(field.message({ chatId: MEMBER, chatType: "private", text: "is my bug done?" }));
-    expect(action.kind === "reply" && action.text).toContain(ERRORS.MODEL_OUTPUT_REFUSED.message);
+    expect(action.kind === "reply" && action.text).toContain(ERRORS.MODEL_UNAVAILABLE.message);
     expect(action.kind === "reply" && action.text).not.toContain("verified and closed");
-    expect(field.logLines.join("\n")).toContain("reply_refused");
+    expect(field.logLines.join("\n")).toContain("reply_fell_back_to_template");
   });
 });
 
@@ -205,12 +211,12 @@ describe("member commands", () => {
     field.service.recordConsent(MEMBER, MEMBER, 1, "storage");
     await field.service.handle(field.message({ chatId: MEMBER, chatType: "private", messageId: 2, text: "android login fails" }));
     const saving = await field.service.handle(field.message({ chatId: MEMBER, chatType: "private", messageId: 3, text: "/mydata" }));
-    expect(saving.kind === "reply" && saving.text).toContain("saving to Walrus now");
+    expect(saving.kind === "reply" && saving.text).toContain("still saving");
     await field.queue.settled();
     const saved = await field.service.handle(field.message({ chatId: MEMBER, chatType: "private", messageId: 4, text: "/mydata" }));
     expect(saved.kind === "reply" && saved.text).toContain("https://walruscan.com/mainnet/blob/");
-    expect(saved.kind === "reply" && saved.text).toContain("you filed");
-    expect(saved.kind === "reply" && saved.text).toContain("cannot be deleted");
+    expect(saved.kind === "reply" && saved.text).toContain("you raised a problem");
+    expect(saved.kind === "reply" && saved.text).toContain("Nobody can delete them");
   });
 
   it("/mydata shows a failed write as failed", async () => {
@@ -218,14 +224,14 @@ describe("member commands", () => {
     field.service.recordConsent(MEMBER, MEMBER, 1, "storage");
     await field.queue.settled();
     const action = await field.service.handle(field.message({ chatId: MEMBER, chatType: "private", messageId: 3, text: "/mydata" }));
-    expect(action.kind === "reply" && action.text).toContain("FAILED to save");
+    expect(action.kind === "reply" && action.text).toContain("did NOT save");
     expect(action.kind === "reply" && action.text).not.toContain("saved https");
   });
 
   it("/mydata says plainly when it holds nothing", async () => {
     const field = harness();
     const action = await field.service.handle(field.message({ chatId: MEMBER, chatType: "private", text: "/mydata" }));
-    expect(action.kind === "reply" && action.text).toContain("nothing about you yet");
+    expect(action.kind === "reply" && action.text).toContain("do not hold anything about you yet");
   });
 
   it("/correct records a correction for a line the member owns", async () => {
@@ -235,7 +241,7 @@ describe("member commands", () => {
     await field.service.handle(field.message({ chatId: MEMBER, chatType: "private", messageId: 2, text: "i am a designer" }));
     expect(field.cache.state().members.get(memberH)?.profile.get("role")).toBe("designer");
     const corrected = await field.service.handle(field.message({ chatId: MEMBER, chatType: "private", messageId: 3, text: "/correct 2 developer" }));
-    expect(corrected.kind === "reply" && corrected.text).toContain("role = developer");
+    expect(corrected.kind === "reply" && corrected.text).toContain('I have it as "developer" now');
     expect(field.cache.state().members.get(memberH)?.profile.get("role")).toBe("developer");
   });
 
@@ -243,11 +249,11 @@ describe("member commands", () => {
     const field = harness({ classification: '{"kind":"chit_chat"}' });
     field.service.recordConsent(MEMBER, MEMBER, 1, "storage");
     const unknown = await field.service.handle(field.message({ chatId: MEMBER, chatType: "private", messageId: 2, text: "/correct 99 whatever" }));
-    expect(unknown.kind === "reply" && unknown.text).toContain("no line 99 for you");
+    expect(unknown.kind === "reply" && unknown.text).toContain("do not have a line 99 for you");
     const notCorrectable = await field.service.handle(field.message({ chatId: MEMBER, chatType: "private", messageId: 3, text: "/correct 1 whatever" }));
-    expect(notCorrectable.kind === "reply" && notCorrectable.text).toContain("not one you can correct");
+    expect(notCorrectable.kind === "reply" && notCorrectable.text).toContain("not one you can change");
     const usage = await field.service.handle(field.message({ chatId: MEMBER, chatType: "private", messageId: 4, text: "/correct" }));
-    expect(usage.kind === "reply" && usage.text).toContain("Use /correct");
+    expect(usage.kind === "reply" && usage.text).toContain("type /correct and the line number");
   });
 
   it("/correct refuses a value that carries a secret", async () => {

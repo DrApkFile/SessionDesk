@@ -2,7 +2,7 @@ import type { Clock, IdSource } from "../../core/ports.js";
 import type { LedgerCache } from "../../memory/cache.js";
 import type { MemoryPort } from "../../memory/port.js";
 import type { Classifier } from "../../models/classifier.js";
-import type { TextModel } from "../../models/textModel.js";
+import type { ReplyChain } from "../../models/replyChain.js";
 import type { MemberDirectory } from "../shared/directory.js";
 import type { MemoryHealth } from "../shared/health.js";
 import type { Log } from "../shared/log.js";
@@ -17,7 +17,7 @@ export interface MemberDeps {
   readonly pipeline: EventPipeline;
   readonly health: MemoryHealth;
   readonly classifier: Classifier;
-  readonly replyModel: TextModel;
+  readonly replies: ReplyChain;
   readonly pending: PendingClassifications;
   readonly clock: Clock;
   readonly log: Log;

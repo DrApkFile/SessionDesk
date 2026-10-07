@@ -6,9 +6,20 @@ import { isProfileField } from "../../core/vocabulary.js";
 import type { MemberDeps } from "./deps.js";
 import { describeLine } from "./describe.js";
 import { commandOf, isPrivate, pinnedNotice, reply, type IncomingMessage, type MemberAction } from "../shared/incoming.js";
-import { ALREADY_CONSENTED, CONSENT_IN_GROUP, CONSENT_NOTICE, GROUP_OPTIN_NOTICE, HELP, SECRET_WARNING } from "./notices.js";
-
-const CORRECT_USAGE = "Use /correct <number> <new value>, where the number is the one shown beside the line in /mydata.";
+import {
+  ALREADY_CONSENTED,
+  CONSENT_IN_GROUP,
+  CONSENT_NOTICE,
+  CORRECT_NOT_POSSIBLE,
+  CORRECT_USAGE,
+  GROUP_OPTIN_NOTICE,
+  HELP,
+  MYDATA_FOOTER,
+  NOTHING_HELD,
+  SECRET_WARNING,
+  correctDone,
+  correctUnknownLine,
+} from "./notices.js";
 
 export function memberCommands(deps: MemberDeps, message: IncomingMessage, memberH: string): MemberAction {
   const { name, rest } = commandOf(message.text);
@@ -40,25 +51,26 @@ function start(deps: MemberDeps, message: IncomingMessage, memberH: string, rest
 
 function myData(deps: MemberDeps, memberH: string): MemberAction {
   const lines = deps.cache.memoriesOf(memberH);
-  if (lines.length === 0) return reply("I hold nothing about you yet. Send /start to agree, then talk to me and I will keep track.");
+  if (lines.length === 0) return reply(NOTHING_HELD);
   const saved = lines.filter((line) => line.state === "saved").length;
   const failed = lines.filter((line) => line.state === "failed").length;
-  const head = `I hold ${lines.length} line(s) about you: ${saved} saved on Walrus, ${lines.length - saved - failed} still saving, ${failed} failed.`;
+  const saving = lines.length - saved - failed;
+  const counts = [`${saved} saved`, saving > 0 ? `${saving} still saving` : "", failed > 0 ? `${failed} that did not save` : ""].filter((part) => part.length > 0);
+  const head = `Here is everything I remember about you, ${counts.join(", ")}.`;
   const member = deps.cache.state().members.get(memberH);
   const strandedAddress =
     member !== undefined && member.dmUserId !== null && !member.dmConsent
-      ? ["", "You have turned direct messages off, so I no longer use your stored Telegram ID. That line is already on Walrus and cannot be deleted by me or anyone."]
+      ? ["", "You have messages from me turned off, so I no longer use your stored Telegram ID. That line is already on Walrus and I cannot delete it."]
       : [];
-  const tail = "Forgetting means I stop indexing your namespace. Lines already written stay on Walrus and cannot be deleted.";
-  return reply([head, "", ...lines.map(describeLine), ...strandedAddress, "", tail].join("\n"));
+  return reply([head, "", ...lines.map((line, index) => describeLine(line, index + 1)), ...strandedAddress, "", MYDATA_FOOTER].join("\n"));
 }
 
 function correct(deps: MemberDeps, message: IncomingMessage, memberH: string, rest: string): MemberAction {
   const space = rest.search(/\s/);
   if (space === -1) return reply(CORRECT_USAGE);
-  const targetSeq = Number(rest.slice(0, space));
+  const position = Number(rest.slice(0, space));
   const value = clipStoredText(rest.slice(space + 1));
-  if (!Number.isSafeInteger(targetSeq) || targetSeq < 1 || value.length === 0) return reply(CORRECT_USAGE);
+  if (!Number.isSafeInteger(position) || position < 1 || value.length === 0) return reply(CORRECT_USAGE);
 
   const guarded = guardStoredText(value);
   if (!guarded.ok) {
@@ -66,26 +78,26 @@ function correct(deps: MemberDeps, message: IncomingMessage, memberH: string, re
     return reply(SECRET_WARNING);
   }
 
-  const target = deps.cache.memoriesOf(memberH).find((line) => line.event.seq === targetSeq);
+  const held = deps.cache.memoriesOf(memberH);
+  const target = held[position - 1];
   if (target === undefined) {
-    deps.log.say("correct_unknown", { memberH, targetSeq });
-    return reply(`I have no line ${targetSeq} for you, so nothing changed. ${CORRECT_USAGE}`);
+    deps.log.say("correct_unknown", { memberH, position });
+    return reply(correctUnknownLine(position));
   }
 
   const field = correctableField(target.event);
   if (field === null) {
-    deps.log.say("correct_not_correctable", { memberH, targetSeq, type: target.event.type });
-    return reply(`Line ${targetSeq} is not one you can correct, so nothing changed. You can correct a fact about yourself or the text of something you filed.`);
+    deps.log.say("correct_not_correctable", { memberH, position, type: target.event.type });
+    return reply(CORRECT_NOT_POSSIBLE);
   }
 
   const recorded = deps.pipeline.commit(
-    [{ draft: { type: "CORRECTION", targetSeq, field, value }, namespaces: [{ kind: "member", memberH }] }],
+    [{ draft: { type: "CORRECTION", targetSeq: target.event.seq, field, value }, namespaces: [{ kind: "member", memberH }] }],
     { chatId: message.chatId, messageId: message.messageId },
     deps.clock.now(),
   );
-  const seq = recorded[0]?.event.seq ?? 0;
-  deps.log.say("corrected", { memberH, targetSeq, field, seq });
-  return reply(`Noted. Line ${targetSeq} now reads ${field} = ${value}. ${ERRORS.WRITE_PENDING.message} ${ERRORS.WRITE_PENDING.nextAction}`);
+  deps.log.say("corrected", { memberH, position, field, seq: recorded[0]?.event.seq ?? 0 });
+  return reply(correctDone(value));
 }
 
 function correctableField(event: LedgerEvent): string | null {

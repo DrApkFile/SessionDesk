@@ -35,7 +35,7 @@ export function managerReminder(due: DuePromise, memberLabel: string): string {
 
 export function memberReminder(due: DuePromise): string {
   const head = due.overdue
-    ? `A manager promised you this by ${due.promise.due}, and it is not done yet.`
-    : `A manager promised you this by today, ${due.promise.due}.`;
-  return [head, `The promise was: ${due.promise.text}`, "It is still open on record. The team has been reminded. I will tell you when it is marked done."].join("\n");
+    ? `A manager promised you something by ${due.promise.due} and it has not happened yet.`
+    : `A manager promised you something by today, ${due.promise.due}.`;
+  return [head, `What they said: ${due.promise.text}`, "It is still open, and the team has been reminded. I will tell you as soon as it is done."].join("\n");
 }

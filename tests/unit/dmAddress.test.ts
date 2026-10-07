@@ -52,7 +52,7 @@ describe("a DM address survives a restart", () => {
     await run.scheduler.tick();
     expect(run.memberMessages).toHaveLength(1);
     expect(run.memberMessages[0]?.chatId).toBe(MEMBER);
-    expect(run.memberMessages[0]?.text).toContain("still open on record");
+    expect(run.memberMessages[0]?.text).toContain("still open");
   });
 
   it("cannot DM when no address was ever stored and nobody has spoken since boot", async () => {
@@ -132,6 +132,6 @@ describe("the telegram id stays out of everything a human reads", () => {
     });
     const action = await field.service.handle(field.message({ userId: MEMBER, chatId: MEMBER, chatType: "private", messageId: 5, text: "/mydata" }));
     expect(action.kind === "reply" && action.text).toContain("no longer use your stored Telegram ID");
-    expect(action.kind === "reply" && action.text).toContain("cannot be deleted");
+    expect(action.kind === "reply" && action.text).toContain("I cannot delete it");
   });
 });
