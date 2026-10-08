@@ -47,6 +47,8 @@ export function describePlainly(event: LedgerEvent): PlainLine {
       return { lead: "An answer the community can reuse", content: event.answerText };
     case "ANSWER_RETIRED":
       return { lead: "An old answer was", content: "taken out of use" };
+    case "ANSWER_CONFIRMED":
+      return { lead: "A manager confirmed an answer", content: "can be reused" };
     case "ANSWER_FEEDBACK":
       return { lead: "You told me an earlier answer", content: event.helpful ? "helped" : "did not help" };
     case "ITEM_AFFECTS":

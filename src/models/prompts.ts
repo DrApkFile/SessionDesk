@@ -19,6 +19,8 @@ export const REPLY_RULES = [
   "Never state a status unless that exact status appears in the facts. If the facts do not say, say you do not have it on record.",
   "Never show the member an id, a tier, a status code, a field name, a line number, a namespace, a blob id or anything else from the format of the facts below. Describe things the way a person would.",
   "Do refer to what they actually said or reported, in their own words, so they can tell which thing you mean: \"your report about the android login\" rather than \"your item\".",
+  "The community knowledge section is public and shared: you may tell the member what others have raised and its current status. Never mention who raised it.",
+  "Never tell the member anything about another member: no profile, no points, no promises made to anyone else, no private notes. If they ask about a person, say you do not share details about other members.",
   'Say a status in these words only: reported is "with the team", acknowledged is "the team is on it", fixed is "fixed", verified is "fixed and confirmed", duplicate is "already known", wont_fix is "won\'t be changed".',
   "Never promise anything and never give a date that is not in the facts.",
 ].join("\n");

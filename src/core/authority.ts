@@ -28,6 +28,7 @@ export const EVENT_AUTHORITY = {
   MANAGER_ADDED: "setup_command",
   MANAGER_REMOVED: "setup_command",
   COMMUNITY_SET: "setup_command",
+  ANSWER_CONFIRMED: "manager_command",
 } satisfies Record<EventType, Authority>;
 
 export type EventTypeFrom<A extends Authority> = {

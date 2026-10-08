@@ -21,6 +21,10 @@ export class MemberDirectory {
     return this.#byMemberH.size;
   }
 
+  userNames(): readonly string[] {
+    return [...this.#byMemberH.values()].map((member) => member.userName).filter((name): name is string => name !== null);
+  }
+
   byMemberH(memberH: string): KnownMember | null {
     return this.#byMemberH.get(memberH) ?? null;
   }

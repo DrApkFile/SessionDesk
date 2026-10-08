@@ -79,6 +79,7 @@ export interface Harness {
   readonly replies: ReplyChain;
   readonly waits: number[];
   readonly directory: MemberDirectory;
+  readonly managerNotices: Array<{ text: string; answerIds: readonly string[] }>;
   readonly cache: LedgerCache;
   readonly queue: WriteQueue;
   readonly memory: FakeMemory;
@@ -155,6 +156,7 @@ export function harness(options: HarnessOptions = {}): Harness {
   });
   const directory = new MemberDirectory();
   const self = { username: "sdmemberbot" };
+  const managerNotices: Array<{ text: string; answerIds: readonly string[] }> = [];
   const clock = { now: () => modelState.at };
   const waits: number[] = [];
   const gemini = new GeminiModel({ apiKey: "AIzatestkey", model: "gemini-3.8-flash", fallbackModel: "gemini-3.5-flash" }, async () => {}, modelFetch(options, modelState));
@@ -187,6 +189,9 @@ export function harness(options: HarnessOptions = {}): Harness {
     ids: countingIds(),
     directory,
     directMessagesNeedOptIn: options.directMessagesNeedOptIn ?? true,
+    notifyManagers: async (notice) => {
+      managerNotices.push(notice);
+    },
     memory,
     managerIds: options.managerKeys ?? [userKey("telegram", String(MANAGER_ID))],
     self,
@@ -201,6 +206,7 @@ export function harness(options: HarnessOptions = {}): Harness {
     replies,
     waits,
     directory,
+    managerNotices,
     cache,
     queue,
     memory,

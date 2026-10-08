@@ -47,7 +47,7 @@ describe("F15 account B boundary", () => {
   });
 
   it("keeps the notes namespace out of every module except the manager bot and the namespace resolver", () => {
-    const allowed = ["src/core/namespace.ts"];
+    const allowed = [join("src", "core", "namespace.ts"), join("src", "core", "aboutOthers.ts")];
     const offenders = sourceFiles("src")
       .filter((path) => !path.startsWith(join("src", "bots", "manager")))
       .filter((path) => !allowed.includes(path))

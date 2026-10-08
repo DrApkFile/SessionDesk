@@ -28,4 +28,7 @@ export interface MemberDeps {
   readonly managerIds: readonly string[];
   readonly self: BotHandle;
   readonly directMessagesNeedOptIn: boolean;
+  readonly notifyManagers: ManagerNotice;
 }
+
+export type ManagerNotice = (notice: { readonly text: string; readonly answerIds: readonly string[] }) => Promise<void>;

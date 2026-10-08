@@ -21,6 +21,7 @@ export const MANAGER_COMMANDS: readonly ManagerCommandSpec[] = [
   { name: "notes", description: "Read the manager-only notes back", argsHint: null },
   { name: "answers", description: "Every answer the community has on record", argsHint: null },
   { name: "retire", description: "Stop an answer being reused", argsHint: "the answer id" },
+  { name: "confirm", description: "Allow an answer to be reused", argsHint: "the answer id" },
   { name: "ambassador", description: "Make a member an ambassador", argsHint: "a name or member code" },
   { name: "unambassador", description: "Remove an ambassador badge", argsHint: "a name or member code" },
   { name: "report", description: "A weekly draft written from counted data", argsHint: null },

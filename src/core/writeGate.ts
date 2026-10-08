@@ -7,7 +7,7 @@ import { guardStoredText } from "./redactor.js";
 import { refuse, ok, type Result } from "./result.js";
 import { matchTheme, themeLabelFor, type ThemeRecord } from "./themes.js";
 import { clipStoredText } from "./text.js";
-import type { ItemKind } from "./vocabulary.js";
+import type { ItemKind, ItemVisibility } from "./vocabulary.js";
 
 export type GateDraft = DraftFrom<"write_gate">;
 
@@ -24,6 +24,7 @@ export interface GateContext {
   readonly helperPairDayCounts: ReadonlyMap<string, number>;
   readonly day: string;
   readonly ids: IdSource;
+  readonly visibility: ItemVisibility;
 }
 
 const ITEM_KINDS_BY_MESSAGE = { bug: "bug", feature: "feature", feedback: "feedback" } as const;
@@ -54,7 +55,14 @@ export function planWrites(classification: Classification, text: string, context
   }
 
   const itemKind: ItemKind = ITEM_KINDS_BY_MESSAGE[kind];
-  const draft: GateDraft = { type: "ITEM_OPENED", itemId: context.ids.newItemId(), kind: itemKind, themeId, text: clipStoredText(text) };
+  const draft: GateDraft = {
+    type: "ITEM_OPENED",
+    itemId: context.ids.newItemId(),
+    kind: itemKind,
+    themeId,
+    text: clipStoredText(text),
+    visibility: context.visibility,
+  };
   return ok([...writes, { draft, namespaces: [{ kind: "member", memberH: context.memberH }, { kind: "items" }] }]);
 }
 

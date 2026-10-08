@@ -16,6 +16,7 @@ function context(): GateContext {
     replyToMemberH: null,
     helperPairDayCounts: new Map(),
     day: "2026-10-07",
+    visibility: "public",
     ids: countingIds(),
   };
 }

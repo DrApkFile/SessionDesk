@@ -2,6 +2,7 @@ import { Bot, type Context } from "grammy";
 import type { Log } from "../shared/log.js";
 import type { BotAction, IncomingMessage } from "../shared/incoming.js";
 import { chatKindOfTelegram } from "../../platform/telegramShapes.js";
+import { ANSWER_DECISION_PREFIX } from "./answerDecisions.js";
 import { strippedTelegramText } from "../../platform/telegram/mentions.js";
 import type { ManagerService } from "./service.js";
 
@@ -52,6 +53,23 @@ export async function buildManagerBot(token: string, service: ManagerService, lo
     const incoming = toManagerIncoming(context, me.username);
     if (incoming === null) return;
     await send(context, await service.handle(incoming));
+  });
+
+  bot.callbackQuery(new RegExp(`^${ANSWER_DECISION_PREFIX}`), async (context) => {
+    const from = context.callbackQuery.from;
+    const outcome = service.decisionFromTap({
+      platform: "telegram",
+      userId: String(from.id),
+      chatId: String(context.chat?.id ?? from.id),
+      chatKind: chatKindOfTelegram(context.chat?.type ?? "private"),
+      messageId: String(context.callbackQuery.message?.message_id ?? 0),
+      callback: context.callbackQuery.data,
+    });
+    if (outcome.ignored) {
+      await context.answerCallbackQuery();
+      return;
+    }
+    await context.answerCallbackQuery({ text: outcome.alert.slice(0, 190), show_alert: true });
   });
 
   bot.catch((error) => {

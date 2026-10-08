@@ -30,8 +30,14 @@ export interface KnownIssueMatch {
 export const OPEN_ITEM_STATUSES = ["reported", "acknowledged"] as const;
 
 export function retireAnswer(current: AnswerState): Result<AnswerState> {
-  if (current !== "active") return refuse("INVALID_TRANSITION", `a ${current} answer cannot be retired again`);
+  if (current === "retired") return refuse("INVALID_TRANSITION", "that answer is already retired");
   return ok("retired");
+}
+
+export function confirmAnswer(current: AnswerState): Result<AnswerState> {
+  if (current === "active") return refuse("INVALID_TRANSITION", "that answer is already confirmed");
+  if (current === "retired") return refuse("INVALID_TRANSITION", "that answer was retired, so it cannot be confirmed");
+  return ok("active");
 }
 
 function withinThreshold(hits: readonly SearchHit[], maxDistance: number): readonly SearchHit[] {

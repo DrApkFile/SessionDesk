@@ -5,9 +5,11 @@ import { reviewReply } from "../../core/replyGuard.js";
 import { ERRORS } from "../../core/errors.js";
 import { managerPrompt } from "../../models/prompts.js";
 import { commandOf, isCommand, reply, silent, type BotAction, type IncomingMessage } from "../shared/incoming.js";
+import type { ButtonTap } from "../../platform/platform.js";
 import type { ManagerContext, ManagerDeps } from "./deps.js";
 import { MANAGER_HELP } from "./help.js";
-import { listAnswers, retire } from "./answerCommands.js";
+import { confirm, listAnswers, retire } from "./answerCommands.js";
+import { answerDecisionIn } from "./answerDecisions.js";
 import { addManager, claim, removeManager, setupCommunity } from "./setupCommands.js";
 import { listNotes, writeNote } from "./noteCommands.js";
 import { donePromise, makePromise, owed } from "./promiseCommands.js";
@@ -15,6 +17,11 @@ import { helpers, memberCard, status, themes, weeklyReport } from "./reportComma
 import { changeStatus, isStatusCommand } from "./statusCommands.js";
 import { buildSummary } from "./summary.js";
 import { grantAmbassador, revokeAmbassador } from "./tierCommands.js";
+
+export interface ManagerTapOutcome {
+  readonly ignored: boolean;
+  readonly alert: string;
+}
 
 export class ManagerService {
   readonly #deps: ManagerDeps;
@@ -77,9 +84,36 @@ export class ManagerService {
     if (name === "/unambassador") return revokeAmbassador(this.#deps, context, rest);
     if (name === "/answers") return listAnswers(this.#deps);
     if (name === "/retire") return retire(this.#deps, context, rest);
+    if (name === "/confirm") return confirm(this.#deps, context, rest);
     if (name === "/report") return weeklyReport(this.#deps);
     if (name === "/status") return status(this.#deps);
     return reply(MANAGER_HELP);
+  }
+
+  decisionFromTap(tap: ButtonTap): ManagerTapOutcome {
+    const decision = answerDecisionIn(tap.callback);
+    if (decision === null) return { ignored: true, alert: "" };
+    const message: IncomingMessage = {
+      platform: tap.platform,
+      chatId: tap.chatId,
+      chatKind: tap.chatKind,
+      messageId: tap.messageId,
+      userId: tap.userId,
+      isBot: false,
+      userName: null,
+      text: "",
+      mentionsBot: true,
+      replyToUserId: null,
+      replyToIsBot: false,
+      replyToText: null,
+    };
+    if (!this.#mayManage(message)) {
+      this.#deps.log.say("not_manager", { platform: tap.platform, chat: tap.chatKind, reason: "tapped an answer button without manager rights" });
+      return { ignored: false, alert: ERRORS.NOT_MANAGER.message };
+    }
+    const context: ManagerContext = { message, managerId: tap.userId, replyToMemberH: null };
+    const action = decision.decision === "keep" ? confirm(this.#deps, context, decision.answerId) : retire(this.#deps, context, decision.answerId);
+    return { ignored: false, alert: action.kind === "reply" ? action.text : "" };
   }
 
   summary(): string {

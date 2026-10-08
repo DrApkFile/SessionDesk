@@ -1,4 +1,4 @@
-import type { Bot } from "grammy";
+import { InlineKeyboard, type Bot } from "grammy";
 import { buildManagerBot } from "../../bots/manager/telegram.js";
 import { buildMemberBot } from "../../bots/member/telegram.js";
 import type { MemberService } from "../../bots/member/service.js";
@@ -66,8 +66,9 @@ export async function startTelegram(start: TelegramStart): Promise<PlatformRunti
   return {
     platform: "telegram",
     supervisors,
-    toManager: async (chatId, text) => {
-      await managerBot.bot.api.sendMessage(chatId, text);
+    toManager: async (chatId, text, choices) => {
+      const keyboard = choices === undefined || choices.length === 0 ? undefined : choices.reduce((built, choice) => built.text(choice.label, choice.callback), new InlineKeyboard());
+      await managerBot.bot.api.sendMessage(chatId, text, keyboard === undefined ? undefined : { reply_markup: keyboard });
     },
     toMember: async (chatId, text) => {
       await memberBot.bot.api.sendMessage(chatId, text);

@@ -24,12 +24,16 @@ changes, across a restart**. Not "the bot remembers you said hello".
 |---|---|---|
 | Memory survives a restart, with the **current** status | `npm run test:live` writes 6 lines to mainnet, wipes the cache, rebuilds from Walrus, and compares resolved state | `evidence/restore-test-*.json`, `passed: true` |
 | It is running and polling | `GET https://<service>/health` → 200, `status: ok`, both bots `polling: true` | live endpoint |
+| A member learns what the community knows | Ask about a bug somebody else reported in the group: the reply gives its current status. Ask about one reported in a DM: it is invisible | `tests/unit/communityKnowledge.test.ts` |
+| Nothing about another member is shared | A question naming a person and a personal topic is refused in code before any model sees it, and another member's profile, promises, notes and points never enter the model's context | `src/core/aboutOthers.ts`, `tests/unit/communityKnowledge.test.ts` |
 | A member never sees an internal format | `npm test` walks every reply the member bot can send without a model and asserts no facts-sheet header, item id, tier label, status code, seq number or namespace appears | `tests/unit/plainLanguage.test.ts` |
 | A status is said in plain words | reported is "with the team", fixed is "fixed", and the reply guard maps those phrases back to statuses so a model cannot smuggle a wrong one through | `src/core/plainWords.ts` |
 | Another community can run this without editing code | `npm run setup` checks every value live and writes `.env`; or click Deploy to Render. Then `/claim`, `/setup`, `/optin`. No personal ids in settings | `tests/unit/selfSetup.test.ts`, `docs/ENV_VARS.md` |
 | Ownership cannot be taken | A second `OWNER_SET`, a manager change not signed by the owner, and a `COMMUNITY_SET` from a non-manager are all rejected by the resolver, not just by the command layer | `tests/unit/selfSetup.test.ts` |
 | A member can opt in without leaving the group | A manager runs `/optin`; the pinned notice has **I agree** and **I agree + DMs**. One tap records consent under that member's namespace hash, a second tap writes nothing | `tests/unit/groupOptin.test.ts` |
-| An earlier answer is reused instead of re-answered | Ask a question the group already answered: the reply names who answered, the date and a Walruscan receipt, and asks "did this help?" | `tests/unit/answerReuse.test.ts`, `/answers` |
+| An earlier answer is reused instead of re-answered | `/confirm` the answer in the manager bot first, then ask the question again: the reply names who answered, the date and a Walruscan receipt, and asks "did this help?" | `tests/unit/answerReuse.test.ts`, `/answers` |
+| An unconfirmed answer is never reused | Ask something matching one of the six legacy answers: you get a normal reply, and `/answers` shows it as NOT CONFIRMED | `tests/unit/answerReuse.test.ts` |
+| A vague question is not matched at all | Mention the bot with "what's <someone> fixed?": the log says `reuse_skipped` with the content-word count, and no search runs | `tests/unit/reuseQuery.test.ts` |
 | A duplicate bug is linked, not opened twice | Report something already on record: the reply gives the existing item's current status and counts you as affected | `tests/unit/answerReuse.test.ts` |
 | A promise follow-up survives a restart | `DM_ADDRESS` is restored from Walrus at boot, so a member who agreed to DMs is reachable without speaking again | `tests/unit/dmAddress.test.ts` |
 | Blobs are on mainnet, with the agent id | `npm run evidence` → every blob id with a Walruscan link | `evidence/A05-blobcount.json` |
@@ -65,8 +69,15 @@ Run `4bd0e04c` · commit `892370b` · 2026-10-08T22:23Z · mainnet · 5 question
 | Encoded wire line only | 15/15 | 0.386 – 0.713 | 0.847 | 0.134 |
 | Natural language first | 15/15 | 0.365 – 0.672 | 0.865 | **0.193** |
 
-Thresholds come from the natural-language row: `ANSWER_MAX_DISTANCE` 0.72, just above the furthest
-true paraphrase; `KNOWN_ISSUE_MAX_DISTANCE` 0.6, stricter on purpose.
+The 15 true paraphrase distances, natural-language format, in order: 0.365, 0.404, 0.434, 0.444,
+0.446, 0.47, 0.479, 0.502, 0.509, 0.52, 0.522, 0.545, 0.547, 0.554, 0.672.
+
+`ANSWER_MAX_DISTANCE` is **0.56**: the lowest round value that keeps 14 of those 15. It drops only
+the 0.672 outlier and turns the margin to the closest unrelated query (0.865) from 0.145 into
+**0.305**. The cost is stated rather than hidden: one paraphrase in fifteen is re-answered instead
+of reused. `KNOWN_ISSUE_MAX_DISTANCE` is **0.5**, kept below the answer threshold on purpose.
+Both are pinned by `tests/unit/searchableLine.test.ts`, so changing either without re-measuring
+fails the gate.
 
 ## The measured claim: stale status in the model's context
 
@@ -160,15 +171,32 @@ when both env and events exist **env wins** — tested both ways.
   is recorded here.
 - **Answer reuse never fired until 2026-10-08 because the distance threshold was set below any
   real match.** Measured on mainnet (run `4bd0e04c`): true paraphrases land at 0.365 to 0.672 and
-  the closest unrelated query at 0.865, while `ANSWER_MAX_DISTANCE` was 0.32. It is now 0.72, just
-  above the furthest true paraphrase. `KNOWN_ISSUE_MAX_DISTANCE` is 0.6, deliberately stricter and
-  extrapolated rather than measured, because a wrong known-issue link silently swallows a real
-  report while a wrong answer reuse is recoverable.
+  the closest unrelated query at 0.865, while `ANSWER_MAX_DISTANCE` was 0.32. It was then set to
+  0.72, which produced a false match in the group within a day, and is now 0.56 — the value that
+  keeps 14 of the 15 measured paraphrases. `KNOWN_ISSUE_MAX_DISTANCE` is 0.5, deliberately
+  stricter and extrapolated rather than measured, because a wrong known-issue link silently
+  swallows a real report while a wrong answer reuse is recoverable.
 - **The storage format change is an improvement, not the fix.** Both formats ranked the right
   answer first in 15 of 15 paraphrases; natural language widened the gap from 0.134 to 0.193.
-- **The six answers currently on mainnet are junk** captured before the substance check existed
-  ("she no call me o", a question that was literally "?"). They are listed by `/answers` and should
-  be retired with `/retire`.
+- **Nothing on mainnet is reusable today.** An answer is reused only in state `active`, and an
+  `ANSWER` line without the `confirmed` flag — which is every line written before 2026-10-09 —
+  decodes as `pending`. The six junk answers already there ("she no call me o", a question that was
+  literally "?") are therefore inert without rewriting history. A manager promotes an answer with
+  `/confirm <answerId>` or the Keep button, and `/answers` names the pending ids.
+- **A false match reached the group once**, on 2026-10-09 with the threshold at 0.72: "what's
+  Kenne fixed?" drew the conflict reply, which then quoted two members' off-topic remarks back to
+  the group. Four defences now stand between that message and a reply, each sufficient alone:
+  legacy answers are pending; a question must carry 2 words of its own after handles and known
+  names are stripped (that one leaves "fixed"); the threshold is 0.56; and the conflict reply
+  quotes nothing. **Its own distance was never read from the live log**, so 0.56 comes from run
+  `4bd0e04c` and not from that message.
+- **Public means "reported in the community chat".** An item reported in a direct message is
+  private: only its reporter and the managers ever see it. Items written before the field existed
+  default to public, because the group chat is where they came from — but their origin was never
+  recorded, so a legacy direct-message report would be exposed. On this deployment all seven
+  legacy items are visibly group messages.
+- **The community section is capped**: at most three matched items and three themes, within
+  `KNOWN_ISSUE_MAX_DISTANCE` (0.5), stricter than the answer threshold.
 - **Answer reuse needs exactly one clear match.** Two answers within the distance threshold means
   none is reused, by design. Thresholds are in `src/core/tuning.ts`.
 - **An answer recorded from a thanked member reply has no question text**, because Telegram does

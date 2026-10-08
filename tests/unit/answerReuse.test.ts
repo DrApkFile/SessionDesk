@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { encode } from "../../src/core/codec.js";
-import { ANSWER_MAX_DISTANCE, KNOWN_ISSUE_MAX_DISTANCE } from "../../src/core/tuning.js";
+import { ANSWER_MAX_DISTANCE, KNOWN_ISSUE_MAX_DISTANCE, MIN_REUSE_CONTENT_WORDS } from "../../src/core/tuning.js";
+import { CONFLICTING_ANSWERS_REPLY } from "../../src/bots/member/reuse.js";
 import { GROUP_CHAT_ID, MANAGER_ID, harness, type Harness } from "../support/memberHarness.js";
+import { reuseQueryOf } from "../../src/core/reuseQuery.js";
+import { storedLine } from "../../src/core/searchableLine.js";
+import type { LedgerEvent } from "../../src/core/events.js";
 
 const MEMBER = 42_000_001;
 const OTHER = 42_000_002;
@@ -125,7 +129,7 @@ describe("an earlier answer is reused when it clearly matches", () => {
     expect(action.kind === "reply" && action.text).not.toContain("This came up before");
   });
 
-  it("refuses to choose when two answers are both near enough", async () => {
+  it("refuses to choose when two answers are both near enough, says so without quoting either, and asks the managers", async () => {
     const field = harness({ classification: '{"kind":"other"}' });
     await managerAnswers(field, "how do I reset my password?", "Open settings, then Account, then Reset.", 10);
     await managerAnswers(field, "how do I change my password?", "Use the Reset link on the sign-in screen.", 11);
@@ -136,6 +140,13 @@ describe("an earlier answer is reused when it clearly matches", () => {
     consent(field, MEMBER);
     const action = await field.service.handle(field.message({ userId: MEMBER, chatId: MEMBER, chatType: "private", messageId: 22, text: "how do I reset my password?" }));
     expect(action.kind === "reply" && action.text).not.toContain("This came up before");
+    expect(action.kind === "reply" && action.text).toBe(CONFLICTING_ANSWERS_REPLY);
+    expect(action.kind === "reply" && action.text).not.toContain("Open settings");
+    expect(action.kind === "reply" && action.text).not.toContain("Use the Reset link");
+    expect(field.managerNotices).toHaveLength(1);
+    expect(field.managerNotices[0]?.text).toContain("Open settings");
+    expect(field.managerNotices[0]?.text).toContain("Use the Reset link");
+    expect(field.managerNotices[0]?.answerIds).toHaveLength(2);
   });
 
   it("never reuses a retired answer", async () => {
@@ -221,5 +232,101 @@ describe("a bug that is already known is linked, not opened twice", () => {
     consent(field, MEMBER);
     await field.service.handle(field.message({ userId: MEMBER, chatId: MEMBER, chatType: "private", messageId: 35, text: "I also cannot log in on android" }));
     expect([...field.cache.state().items.values()]).toHaveLength(2);
+  });
+});
+
+describe("an answer is reused only when a manager has confirmed it", () => {
+  async function fieldWithStoredAnswer(options: { readonly confirmed: boolean; readonly distance: number }): Promise<Harness> {
+    const field = harness({ classification: '{"kind":"other"}' });
+    const event = {
+      type: "ANSWER",
+      answerId: "a-stored",
+      questionText: "how do I reset my password",
+      answerText: "Open settings, then Account, then Reset.",
+      answeredBy: "manager",
+      themeId: "t-pw",
+      seq: 300,
+      ts: "2026-10-07T09:00:00.000Z",
+      ...(options.confirmed ? { confirmed: true } : {}),
+    } as const satisfies LedgerEvent;
+    field.cache.record({ seq: 300, namespace: ANSWERS_NAMESPACE, memberH: null, event, state: "saved", blobId: "bstored", code: null });
+    field.memory.configure({
+      searchHits: new Map([[ANSWERS_NAMESPACE, [{ text: storedLine(event), blobId: "bstored", distance: options.distance }]]]),
+    });
+    field.classifyAs('{"kind":"question","themeLabel":"passwords"}');
+    consent(field, MEMBER);
+    return field;
+  }
+
+  it("reuses a confirmed answer", async () => {
+    const field = await fieldWithStoredAnswer({ confirmed: true, distance: 0.1 });
+    const action = await field.service.handle(field.message({ userId: MEMBER, chatId: MEMBER, chatType: "private", messageId: 70, text: "how do I reset my password?" }));
+    expect(action.kind === "reply" && action.text).toContain("This came up before");
+  });
+
+  it("never reuses an answer written before the confirm flow existed, however close the match", async () => {
+    const field = await fieldWithStoredAnswer({ confirmed: false, distance: 0.01 });
+    expect(field.cache.state().answers.get("a-stored")?.state).toBe("pending");
+    const action = await field.service.handle(field.message({ userId: MEMBER, chatId: MEMBER, chatType: "private", messageId: 71, text: "how do I reset my password?" }));
+    expect(action.kind === "reply" && action.text).not.toContain("This came up before");
+    expect(action.kind === "reply" && action.text).not.toBe(CONFLICTING_ANSWERS_REPLY);
+  });
+
+  it("reuses that same answer once a manager confirms it", async () => {
+    const field = await fieldWithStoredAnswer({ confirmed: false, distance: 0.01 });
+    field.cache.record({
+      seq: 600,
+      namespace: ANSWERS_NAMESPACE,
+      memberH: null,
+      event: { type: "ANSWER_CONFIRMED", answerId: "a-stored", byManagerId: String(MANAGER_ID), seq: 600, ts: "2026-10-09T10:00:00.000Z" },
+      state: "saved",
+      blobId: "bconfirm",
+      code: null,
+    });
+    expect(field.cache.state().answers.get("a-stored")?.state).toBe("active");
+    const action = await field.service.handle(field.message({ userId: MEMBER, chatId: MEMBER, chatType: "private", messageId: 72, text: "how do I reset my password?" }));
+    expect(action.kind === "reply" && action.text).toContain("This came up before");
+  });
+});
+
+describe("a question too short or too vague to match is never matched", () => {
+  async function fieldWithConfirmedAnswers(distance: number): Promise<Harness> {
+    const field = harness({ classification: '{"kind":"other"}' });
+    await managerAnswers(field, "what did we fix in the android build?", "We fixed the login crash on 2.3.", 10);
+    await managerAnswers(field, "what did we ship last week?", "The new checkout screen.", 11);
+    const stored = field.memory.stored.get(ANSWERS_NAMESPACE) ?? [];
+    field.memory.configure({ searchHits: new Map([[ANSWERS_NAMESPACE, stored.map((line) => ({ text: line.text, blobId: line.blobId, distance }))]]) });
+    field.classifyAs('{"kind":"question","themeLabel":"releases"}');
+    consent(field, MEMBER);
+    return field;
+  }
+
+  it("does not look for an earlier answer when the question is only a mention and a name", async () => {
+    const field = await fieldWithConfirmedAnswers(0.01);
+    field.directory.remember({ platform: "telegram", userId: String(OTHER), memberH: field.service.memberHashOf(OTHER), userName: "kenne" }, field.clock.now());
+    const action = await field.service.handle(
+      field.message({ userId: MEMBER, chatId: GROUP_CHAT_ID, chatType: "supergroup", messageId: 80, text: "@sdmemberbot what's Kenne fixed?", mentionsBot: true }),
+    );
+    expect(action.kind === "reply" && action.text).not.toContain("This came up before");
+    expect(action.kind === "reply" && action.text).not.toBe(CONFLICTING_ANSWERS_REPLY);
+    expect(field.managerNotices).toHaveLength(0);
+    expect(field.logLines.join("\n")).toContain("reuse_skipped");
+    expect(field.logLines.join("\n")).not.toContain("reuse_attempt");
+  });
+
+  it("still looks when the question carries real words of its own", async () => {
+    const field = await fieldWithConfirmedAnswers(0.01);
+    const action = await field.service.handle(
+      field.message({ userId: MEMBER, chatId: MEMBER, chatType: "private", messageId: 81, text: "what did we fix in the android build?" }),
+    );
+    expect(field.logLines.join("\n")).toContain("reuse_attempt");
+    expect(action.kind).toBe("reply");
+  });
+
+  it("counts content words after the names are stripped, never before", () => {
+    const query = reuseQueryOf("@sdmemberbot what's Kenne fixed?", ["sdmemberbot"], ["Kenne"]);
+    expect(query.contentWords).toEqual(["fixed"]);
+    expect(query.contentWords.length).toBeLessThan(MIN_REUSE_CONTENT_WORDS);
+    expect(query.worthMatching).toBe(false);
   });
 });

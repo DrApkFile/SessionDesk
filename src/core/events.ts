@@ -6,6 +6,7 @@ import {
   GRANTABLE_TIERS,
   ITEM_KINDS,
   ITEM_STATUSES,
+  ITEM_VISIBILITIES,
   PROFILE_FIELDS,
   type EventType,
 } from "./vocabulary.js";
@@ -23,7 +24,9 @@ export const EVENT_PAYLOADS = {
   CONSENT_GIVEN: z.object({ scope: z.enum(["storage", "storage_and_dm"]) }).strict(),
   PROFILE_FACT: z.object({ field: z.enum(PROFILE_FIELDS), value: z.string().min(1).max(120) }).strict(),
   QUESTION_ASKED: z.object({ themeId: identifier }).strict(),
-  ITEM_OPENED: z.object({ itemId: identifier, kind: z.enum(ITEM_KINDS), themeId: identifier, text: storedText }).strict(),
+  ITEM_OPENED: z
+    .object({ itemId: identifier, kind: z.enum(ITEM_KINDS), themeId: identifier, text: storedText, visibility: z.enum(ITEM_VISIBILITIES).optional() })
+    .strict(),
   ITEM_STATUS: z.object({ itemId: identifier, status: z.enum(ITEM_STATUSES) }).strict(),
   PROMISE_MADE: z
     .object({
@@ -49,9 +52,11 @@ export const EVENT_PAYLOADS = {
       answerText: storedText,
       answeredBy: z.enum(ANSWER_SOURCES),
       themeId: identifier,
+      confirmed: z.enum(["true", "false"]).transform((raw) => raw === "true").optional(),
     })
     .strict(),
   ANSWER_RETIRED: z.object({ answerId: identifier, byManagerId: actorId }).strict(),
+  ANSWER_CONFIRMED: z.object({ answerId: identifier, byManagerId: actorId }).strict(),
   ITEM_AFFECTS: z.object({ itemId: identifier, memberH: memberHash }).strict(),
   DM_ADDRESS: z.object({ telegramUserId: wholeNumber.positive() }).strict(),
   ANSWER_FEEDBACK: z.object({ answerId: identifier, helpful: z.enum(["true", "false"]).transform((raw) => raw === "true") }).strict(),

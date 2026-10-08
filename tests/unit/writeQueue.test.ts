@@ -12,11 +12,10 @@ describe("F01 the reply path never awaits a write", () => {
   it("returns a saving job before the walrus write has finished", async () => {
     const memory = new FakeMemory({ writeDelayMs: 30 });
     const queue = new WriteQueue(memory, recordedSleep([]), () => {});
-    const before = Date.now();
     const job = queue.enqueue(request(1));
-    expect(Date.now() - before).toBeLessThan(10);
     expect(job.state).toBe("saving");
     expect(job.blobId).toBeNull();
+    expect(memory.stored.size).toBe(0);
     await queue.settled();
     expect(job.state).toBe("saved");
   });

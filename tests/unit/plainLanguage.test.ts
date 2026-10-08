@@ -5,6 +5,7 @@ import { internalLeakIn } from "../../src/core/replyGuard.js";
 import { PLAIN_STATUS } from "../../src/core/plainWords.js";
 import { ITEM_STATUSES } from "../../src/core/vocabulary.js";
 import { clipForMember, describePlainly } from "../../src/bots/member/describe.js";
+import { CONFLICTING_ANSWERS_REPLY } from "../../src/bots/member/reuse.js";
 import { MYDATA_TEXT_CHARS } from "../../src/core/tuning.js";
 import { GROUP_CHAT_ID, MANAGER_ID, harness, type Harness } from "../support/memberHarness.js";
 
@@ -95,13 +96,31 @@ async function everyMemberFacingReply(): Promise<readonly string[]> {
   const saidNo = await reuse.service.handle(reuse.message({ userId: MEMBER, chatId: MEMBER, chatType: "private", messageId: 97, text: "no" }));
   keep(saidNo.kind === "reply" && saidNo.text);
 
+  const clash = harness({ classification: '{"kind":"other"}' });
+  clash.service.recordConsent(MANAGER_ID, MANAGER_ID, 1, "storage");
+  for (const [messageId, question, answer] of [
+    [100, "how do I reset my password?", "Open settings, then Account, then Reset."],
+    [101, "how do I change my password?", "Use the Reset link on the sign-in screen."],
+  ] as const) {
+    await clash.service.handle(clash.message({ userId: MANAGER_ID, messageId, text: answer, replyToUserId: MEMBER, replyToText: question, mentionsBot: true }));
+    await clash.service.handle(clash.message({ userId: MANAGER_ID, messageId: messageId + 500, text: "yes", mentionsBot: true }));
+  }
+  await clash.queue.settled();
+  const both = clash.memory.stored.get(ANSWERS_NAMESPACE) ?? [];
+  clash.memory.configure({ searchHits: new Map([[ANSWERS_NAMESPACE, both.map((line) => ({ text: line.text, blobId: line.blobId, distance: 0.05 }))]]) });
+  clash.classifyAs('{"kind":"question","themeLabel":"passwords"}');
+  clash.service.recordConsent(MEMBER, MEMBER, 2, "storage");
+  const conflicting = await clash.service.handle(clash.message({ userId: MEMBER, chatId: MEMBER, chatType: "private", messageId: 110, text: "how do I reset my password?" }));
+  keep(conflicting.kind === "reply" && conflicting.text);
+  expect(conflicting.kind === "reply" && conflicting.text).toBe(CONFLICTING_ANSWERS_REPLY);
+
   return said;
 }
 
 describe("a member never sees an internal format", () => {
   it("keeps every reply the member bot can send free of ids, labels and status codes", async () => {
     const said = await everyMemberFacingReply();
-    expect(said.length).toBeGreaterThan(14);
+    expect(said.length).toBeGreaterThan(15);
     for (const text of said) assertPlain(text);
   });
 

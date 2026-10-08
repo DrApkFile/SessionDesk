@@ -44,11 +44,18 @@ export async function findEarlierAnswer(memory: MemoryPort, communityKey: string
   };
 }
 
-export function conflictingAnswersReply(matches: readonly AnswerMatch[]): string {
+export const CONFLICTING_ANSWERS_REPLY = "I've seen different answers to this, so I've asked the team to confirm.";
+
+export function conflictingAnswersReply(): string {
+  return CONFLICTING_ANSWERS_REPLY;
+}
+
+export function conflictNoteForManagers(question: string, matches: readonly AnswerMatch[]): string {
   return [
-    "That has been answered here more than once, and the answers do not agree, so I will not pick one for you.",
-    ...matches.slice(0, 2).map((match, index) => `${index === 0 ? "One" : "Another"} said: ${match.answer.answerText}`),
-    "I have flagged it so a manager can tidy it up.",
+    "Two answers on record match the same question closely, so I did not reuse either.",
+    `A member asked: ${question}`,
+    ...matches.slice(0, 2).map((match, index) => `${index + 1}. ${match.answer.answerText}`),
+    "Keep the one that is right and retire the other: tap a button below, or send /confirm <answerId> or /retire <answerId> to the manager bot.",
   ].join("\n");
 }
 

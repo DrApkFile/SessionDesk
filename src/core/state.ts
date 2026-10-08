@@ -2,7 +2,7 @@ import type { DmAddress } from "./dmAddress.js";
 import type { LedgerEvent } from "./events.js";
 import { FIRST_TIER } from "./tier.js";
 import type { Platform } from "../platform/platform.js";
-import type { AnswerSource, AnswerState, ItemKind, ItemStatus, MemberTier, ProfileField, PromiseState } from "./vocabulary.js";
+import type { AnswerSource, AnswerState, ItemKind, ItemStatus, ItemVisibility, MemberTier, ProfileField, PromiseState } from "./vocabulary.js";
 
 export interface LedgerEntry {
   readonly event: LedgerEvent;
@@ -28,6 +28,7 @@ export interface MemberFacts {
 export interface ItemFacts {
   readonly itemId: string;
   readonly kind: ItemKind;
+  readonly visibility: ItemVisibility;
   themeId: string;
   text: string;
   status: ItemStatus;

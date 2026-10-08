@@ -56,11 +56,10 @@ describe("the write pipeline", () => {
   });
 
   it("F01 returns before the write and leaves the line saving", async () => {
-    const { pipeline, cache, queue } = field({ writeDelayMs: 30 });
-    const started = Date.now();
+    const { pipeline, cache, queue, memory } = field({ writeDelayMs: 30 });
     pipeline.commit([{ draft: { type: "CONSENT_GIVEN", scope: "storage" }, namespaces: [{ kind: "member", memberH: MEMBER }] }], { chatId: "-100", messageId: "1" }, now);
-    expect(Date.now() - started).toBeLessThan(10);
     expect(cache.memoriesOf(MEMBER)[0]?.state).toBe("saving");
+    expect(memory.stored.size).toBe(0);
     await queue.settled();
     expect(cache.memoriesOf(MEMBER)[0]?.state).toBe("saved");
   });

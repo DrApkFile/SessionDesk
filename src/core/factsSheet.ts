@@ -1,5 +1,6 @@
 import { isOverdue } from "./promises.js";
 import type { CommunityState } from "./state.js";
+import { renderCommunityKnowledge, type CommunityKnowledge } from "./community.js";
 import { plainStatus, statusBehindPlainWords } from "./plainWords.js";
 import { ITEM_STATUSES, type ItemStatus } from "./vocabulary.js";
 
@@ -12,9 +13,16 @@ export interface FactsSheet {
   readonly statuses: readonly ItemStatus[];
   readonly itemCount: number;
   readonly promiseCount: number;
+  readonly communityItemCount: number;
 }
 
-export function buildFactsSheet(state: CommunityState, memberH: string, now: Date, savedMemories: number): FactsSheet {
+export function buildFactsSheet(
+  state: CommunityState,
+  memberH: string,
+  now: Date,
+  savedMemories: number,
+  community: CommunityKnowledge | null = null,
+): FactsSheet {
   const member = state.members.get(memberH);
   const items = [...state.items.values()].filter((item) => item.openedByH === memberH);
   const promises = [...state.promises.values()].filter((promise) => promise.memberH === memberH && promise.state === "open");
@@ -41,16 +49,23 @@ export function buildFactsSheet(state: CommunityState, memberH: string, now: Dat
         )),
   ];
 
+  const communityLines = community === null ? [] : ["", ...renderCommunityKnowledge(community)];
+  const communityStatuses = community === null ? [] : community.items.map((item) => item.status);
+
   return {
     memberH,
-    text: lines.join("\n"),
-    statuses: [...new Set(items.map((item) => item.status))],
+    text: [...lines, ...communityLines].join("\n"),
+    statuses: [...new Set([...items.map((item) => item.status), ...communityStatuses])],
     itemCount: items.length,
     promiseCount: promises.length,
+    communityItemCount: community === null ? 0 : community.items.length,
   };
 }
 
 export function templateReply(sheet: FactsSheet): string {
+  if (sheet.itemCount === 0 && sheet.promiseCount === 0 && sheet.communityItemCount > 0) {
+    return `I have nothing on record for you, but the community has ${sheet.communityItemCount} related thing(s) on record. Ask me again and I will try to summarise them.`;
+  }
   if (sheet.itemCount === 0 && sheet.promiseCount === 0) {
     return "I have nothing on record for you yet. Tell me about a problem or ask me something and I will keep track of it.";
   }

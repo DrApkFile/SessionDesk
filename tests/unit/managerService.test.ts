@@ -3,6 +3,7 @@ import { ERRORS } from "../../src/core/errors.js";
 import { SUMMARY_HEADER } from "../../src/bots/manager/summary.js";
 import { WEEKLY_HEADER } from "../../src/bots/manager/weekly.js";
 import { MANAGER_ID, NOTES_NAMESPACE, OUTSIDER_ID, managerHarness, type ManagerHarness } from "../support/managerHarness.js";
+import { answerDecisionCallback, answerDecisionIn, decisionChoices } from "../../src/bots/manager/answerDecisions.js";
 
 const MEMBER_ID = 42_000_001;
 
@@ -314,7 +315,12 @@ describe("the weekly report is drafted from counted data", () => {
 
 function recordAnswer(field: ManagerHarness, answerId = "a-1", questionText = "how do I reset my password?"): void {
   field.pipeline.commit(
-    [{ draft: { type: "ANSWER", answerId, questionText, answerText: "Open settings, then Account, then Reset.", answeredBy: "manager", themeId: "t-login" }, namespaces: [{ kind: "answers" }] }],
+    [
+      {
+        draft: { type: "ANSWER", answerId, questionText, answerText: "Open settings, then Account, then Reset.", answeredBy: "manager", themeId: "t-login", confirmed: true },
+        namespaces: [{ kind: "answers" }],
+      },
+    ],
     { chatId: "-100", messageId: "50" },
     field.clock.now(),
   );
@@ -326,7 +332,7 @@ describe("the manager curates the community's answers", () => {
     recordAnswer(field);
     const listed = await field.ask("/answers");
     expect(listed).toContain("1 answer(s)");
-    expect(listed).toContain("a-1 active by manager");
+    expect(listed).toContain("a-1 confirmed by manager");
     expect(listed).toContain("Q: how do I reset my password?");
     expect(listed).toContain("A: Open settings");
   });
@@ -409,5 +415,133 @@ describe("/member works on a reply after a restart, without the member speaking 
     expect(card).toContain("MEMBER FACTS");
     expect(card).toContain("status=reported");
     expect(card).toContain(fresh.memberHashOf(MEMBER_ID).slice(0, 8));
+  });
+});
+
+function recordLegacyAnswer(field: ManagerHarness, answerId = "a-legacy", answerText = "ask kenne, he fixed it"): void {
+  field.pipeline.commit(
+    [
+      {
+        draft: { type: "ANSWER", answerId, questionText: "what did kenne fix?", answerText, answeredBy: "member", themeId: "t-login" },
+        namespaces: [{ kind: "answers" }],
+      },
+    ],
+    { chatId: "-100", messageId: "51" },
+    field.clock.now(),
+  );
+}
+
+describe("an answer is reusable only once a manager has confirmed it", () => {
+  it("shows an answer captured before the confirm flow as not confirmed, and says it is never reused", async () => {
+    const field = managerHarness();
+    recordLegacyAnswer(field);
+    expect(field.cache.state().answers.get("a-legacy")?.state).toBe("pending");
+    const listed = await field.ask("/answers");
+    expect(listed).toContain("a-legacy NOT CONFIRMED");
+    expect(listed).toContain("1 answer(s) are not confirmed, so I never reuse them: a-legacy");
+    expect(listed).toContain("Confirm one with /confirm <answerId>");
+  });
+
+  it("confirms one on request, and refuses to confirm it twice", async () => {
+    const field = managerHarness();
+    recordLegacyAnswer(field);
+    expect(await field.ask("/confirm a-legacy")).toContain("is confirmed, so I can reuse it");
+    expect(field.cache.state().answers.get("a-legacy")?.state).toBe("active");
+    expect(await field.ask("/confirm a-legacy")).toContain("already confirmed");
+  });
+
+  it("refuses to confirm an answer a manager has retired", async () => {
+    const field = managerHarness();
+    recordLegacyAnswer(field);
+    await field.ask("/retire a-legacy");
+    expect(await field.ask("/confirm a-legacy")).toContain("Nothing changed");
+    expect(field.cache.state().answers.get("a-legacy")?.state).toBe("retired");
+  });
+
+  it("refuses a non-manager and changes nothing", async () => {
+    const field = managerHarness();
+    recordLegacyAnswer(field);
+    expect(await field.ask("/confirm a-legacy", { userId: OUTSIDER_ID })).toContain(ERRORS.NOT_MANAGER.message);
+    expect(field.cache.state().answers.get("a-legacy")?.state).toBe("pending");
+  });
+
+  it("asks for the id when none is given", async () => {
+    expect(await managerHarness().ask("/confirm")).toContain("Use /confirm <answerId>");
+  });
+});
+
+describe("the Keep and Retire buttons on a conflict notice", () => {
+  it("offers one pair of buttons per answer, carrying the answer id", () => {
+    const choices = decisionChoices(["a-1", "a-2"]);
+    expect(choices.map((choice) => choice.label)).toEqual(["Keep 1", "Retire 1", "Keep 2", "Retire 2"]);
+    expect(choices[0]?.callback).toBe("answer:keep:a-1");
+    expect(choices[3]?.callback).toBe("answer:retire:a-2");
+    expect(choices.every((choice) => choice.callback.length <= 64)).toBe(true);
+  });
+
+  it("reads back only its own callbacks", () => {
+    expect(answerDecisionIn(answerDecisionCallback("keep", "a-1"))).toEqual({ decision: "keep", answerId: "a-1" });
+    expect(answerDecisionIn("consent:storage")).toBeNull();
+    expect(answerDecisionIn("answer:keep:")).toBeNull();
+    expect(answerDecisionIn("answer:destroy:a-1")).toBeNull();
+  });
+
+  it("confirms the answer when a manager taps Keep", () => {
+    const field = managerHarness();
+    recordLegacyAnswer(field);
+    const outcome = field.service.decisionFromTap({
+      platform: "telegram",
+      userId: String(MANAGER_ID),
+      chatId: String(MANAGER_ID),
+      chatKind: "direct",
+      messageId: "90",
+      callback: answerDecisionCallback("keep", "a-legacy"),
+    });
+    expect(outcome.ignored).toBe(false);
+    expect(outcome.alert).toContain("is confirmed");
+    expect(field.cache.state().answers.get("a-legacy")?.state).toBe("active");
+  });
+
+  it("retires the answer when a manager taps Retire", () => {
+    const field = managerHarness();
+    recordLegacyAnswer(field);
+    const outcome = field.service.decisionFromTap({
+      platform: "telegram",
+      userId: String(MANAGER_ID),
+      chatId: String(MANAGER_ID),
+      chatKind: "direct",
+      messageId: "91",
+      callback: answerDecisionCallback("retire", "a-legacy"),
+    });
+    expect(outcome.alert).toContain("is retired");
+    expect(field.cache.state().answers.get("a-legacy")?.state).toBe("retired");
+  });
+
+  it("changes nothing when someone who is not a manager taps", () => {
+    const field = managerHarness();
+    recordLegacyAnswer(field);
+    const outcome = field.service.decisionFromTap({
+      platform: "telegram",
+      userId: String(OUTSIDER_ID),
+      chatId: String(OUTSIDER_ID),
+      chatKind: "direct",
+      messageId: "92",
+      callback: answerDecisionCallback("retire", "a-legacy"),
+    });
+    expect(outcome.alert).toContain(ERRORS.NOT_MANAGER.message);
+    expect(field.cache.state().answers.get("a-legacy")?.state).toBe("pending");
+    expect(field.logLines.join("\n")).toContain("not_manager");
+  });
+
+  it("ignores a tap it did not send", () => {
+    const field = managerHarness();
+    expect(field.service.decisionFromTap({
+      platform: "telegram",
+      userId: String(MANAGER_ID),
+      chatId: String(MANAGER_ID),
+      chatKind: "direct",
+      messageId: "93",
+      callback: "consent:storage",
+    })).toEqual({ ignored: true, alert: "" });
   });
 });

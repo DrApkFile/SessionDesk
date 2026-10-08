@@ -2,13 +2,17 @@ import type { Classification } from "../../core/classification.js";
 import { ERRORS } from "../../core/errors.js";
 import { buildFactsSheet, templateReply } from "../../core/factsSheet.js";
 import { memberHash, resolveNamespace } from "../../core/namespace.js";
+import { ABOUT_OTHERS_REFUSAL, asksAboutAnotherMember } from "../../core/aboutOthers.js";
 import { readFeedback } from "../../core/feedbackWords.js";
+import type { ItemVisibility } from "../../core/vocabulary.js";
 import { captureVerdict } from "../../core/reusableAnswer.js";
 import type { MessageKind } from "../../core/vocabulary.js";
 import { guardStoredText } from "../../core/redactor.js";
-import { ANSWER_FEEDBACK_WINDOW_MINUTES, ANSWER_MAX_DISTANCE, KNOWN_ISSUE_MAX_DISTANCE } from "../../core/tuning.js";
+import { ANSWER_FEEDBACK_WINDOW_MINUTES, ANSWER_MAX_DISTANCE, KNOWN_ISSUE_MAX_DISTANCE, MIN_REUSE_CONTENT_WORDS } from "../../core/tuning.js";
 import { clipStoredText } from "../../core/text.js";
-import { conflictingAnswersReply, earlierAnswerReply, findEarlierAnswer, findKnownIssue, knownIssueReply } from "./reuse.js";
+import { lookUpCommunityKnowledge } from "./communityLookup.js";
+import { conflictNoteForManagers, conflictingAnswersReply, earlierAnswerReply, findEarlierAnswer, findKnownIssue, knownIssueReply } from "./reuse.js";
+import { reuseQueryOf, strippedOfNames } from "../../core/reuseQuery.js";
 import type { CommittableWrite } from "../shared/pipeline.js";
 import { internalLeakIn, reviewReply } from "../../core/replyGuard.js";
 import { planWrites, themeFor, type PlannedWrite } from "../../core/writeGate.js";
@@ -174,7 +178,15 @@ export class MemberService {
       [
         ...created,
         {
-          draft: { type: "ANSWER", answerId, questionText: candidate.question, answerText: candidate.answer, answeredBy: "manager", themeId: theme.value.themeId },
+          draft: {
+            type: "ANSWER",
+            answerId,
+            questionText: strippedOfNames(candidate.question, [this.#deps.self.username], this.#knownNames()),
+            answerText: candidate.answer,
+            answeredBy: "manager",
+            themeId: theme.value.themeId,
+            confirmed: true,
+          },
           namespaces: [{ kind: "answers" }],
         },
       ],
@@ -339,6 +351,7 @@ export class MemberService {
         messageId: message.messageId,
         receivedAt: this.#deps.clock.now(),
         replyToMemberH: this.#helperFor(message),
+        visibility: isPrivate(message) ? "private" : "public",
       });
       this.#deps.log.say("classify_deferred", { memberH, chat: chatLabel(message), detail: classified.detail ?? classified.code, outageMs: this.#deps.classifier.outageMs() });
       if (!isPrivate(message) && !message.mentionsBot) return silent("group message, not mentioned");
@@ -351,7 +364,8 @@ export class MemberService {
     }
 
     const kind = classified.value.classification.kind;
-    const planned = this.#planFor(classified.value.classification, message.text, memberH, this.#helperFor(message));
+    const visibility: ItemVisibility = isPrivate(message) ? "private" : "public";
+    const planned = this.#planFor(classified.value.classification, message.text, memberH, this.#helperFor(message), visibility);
     const answerWrites = this.#captureThankedAnswer(message, kind, planned, classified.value.classification.themeLabel);
 
     let knownIssue = null;
@@ -396,28 +410,43 @@ export class MemberService {
     if (proposal !== null) return proposal;
 
     if (kind === "question") {
-      const attempt = await findEarlierAnswer(this.#deps.memory, this.#deps.communityKey, this.#deps.cache.state(), message.text);
-      this.#deps.log.say("reuse_attempt", {
-        memberH,
-        classifiedAs: kind,
-        classifier: classified.value.classifier,
-        candidates: attempt.candidates,
-        topDistances: attempt.topDistances.join(","),
-        maxDistance: ANSWER_MAX_DISTANCE,
-        decision: attempt.lookup.kind,
-      });
-      if (attempt.lookup.kind === "one") {
-        this.#deps.log.say("answer_reused", {
+      const query = reuseQueryOf(message.text, [this.#deps.self.username], this.#knownNames());
+      if (!query.worthMatching) {
+        this.#deps.log.say("reuse_skipped", {
           memberH,
-          answerId: attempt.lookup.match.answer.answerId,
-          distance: Math.round(attempt.lookup.match.distance * 1000) / 1000,
+          reason: "too few content words after stripping names",
+          contentWords: query.contentWords.length,
+          needed: MIN_REUSE_CONTENT_WORDS,
         });
-        this.#offerPending(message, memberH, attempt.lookup.match.answer.answerId);
-        return this.#speak(message, earlierAnswerReply(attempt.lookup.match));
-      }
-      if (attempt.lookup.kind === "conflicting") {
-        this.#deps.log.say("reuse_conflict", { memberH, answers: attempt.lookup.matches.map((match) => match.answer.answerId).join(",") });
-        return this.#speak(message, conflictingAnswersReply(attempt.lookup.matches));
+      } else {
+        const attempt = await findEarlierAnswer(this.#deps.memory, this.#deps.communityKey, this.#deps.cache.state(), query.text);
+        this.#deps.log.say("reuse_attempt", {
+          memberH,
+          classifiedAs: kind,
+          classifier: classified.value.classifier,
+          contentWords: query.contentWords.length,
+          candidates: attempt.candidates,
+          topDistances: attempt.topDistances.join(","),
+          maxDistance: ANSWER_MAX_DISTANCE,
+          decision: attempt.lookup.kind,
+        });
+        if (attempt.lookup.kind === "one") {
+          this.#deps.log.say("answer_reused", {
+            memberH,
+            answerId: attempt.lookup.match.answer.answerId,
+            distance: Math.round(attempt.lookup.match.distance * 1000) / 1000,
+          });
+          this.#offerPending(message, memberH, attempt.lookup.match.answer.answerId);
+          return this.#speak(message, earlierAnswerReply(attempt.lookup.match));
+        }
+        if (attempt.lookup.kind === "conflicting") {
+          const matches = attempt.lookup.matches;
+          this.#deps.log.say("reuse_conflict", { memberH, answers: matches.map((match) => match.answer.answerId).join(",") });
+          await this.#deps
+            .notifyManagers({ text: conflictNoteForManagers(query.text, matches), answerIds: matches.slice(0, 2).map((match) => match.answer.answerId) })
+            .catch(() => undefined);
+          return this.#speak(message, conflictingAnswersReply());
+        }
       }
     }
 
@@ -428,7 +457,7 @@ export class MemberService {
   async retryHeld(held: HeldMessage): Promise<RetryOutcome> {
     const classified = await this.#deps.classifier.classify(held.text);
     if (!classified.ok) return "model_down";
-    const planned = this.#planFor(classified.value.classification, held.text, held.memberH, held.replyToMemberH);
+    const planned = this.#planFor(classified.value.classification, held.text, held.memberH, held.replyToMemberH, held.visibility);
     const recorded = planned.length === 0 ? [] : this.#deps.pipeline.commit(planned, { chatId: held.chatId, messageId: held.messageId }, held.receivedAt);
     this.#deps.log.say("stored_after_outage", {
       memberH: held.memberH,
@@ -439,7 +468,13 @@ export class MemberService {
     return "classified";
   }
 
-  #planFor(classification: Classification, text: string, memberH: string, helperH: string | null): readonly PlannedWrite[] {
+  #planFor(
+    classification: Classification,
+    text: string,
+    memberH: string,
+    helperH: string | null,
+    visibility: ItemVisibility,
+  ): readonly PlannedWrite[] {
     const state = this.#deps.cache.state();
     const planned = planWrites(classification, text, {
       memberH,
@@ -449,6 +484,7 @@ export class MemberService {
       helperPairDayCounts: helperH === null ? new Map() : (state.members.get(helperH)?.helperPairDayCounts ?? new Map()),
       day: this.#deps.clock.now().toISOString().slice(0, 10),
       ids: this.#deps.ids,
+      visibility,
     });
     if (!planned.ok) {
       this.#deps.log.say("gate_refused", { code: planned.code, detail: planned.detail ?? "" });
@@ -464,8 +500,24 @@ export class MemberService {
   }
 
   async #answer(message: IncomingMessage, memberH: string, modelDown: boolean, partial: boolean): Promise<MemberAction> {
+    const asking = asksAboutAnotherMember(message.text, [this.#deps.self.username], this.#otherNames(memberH));
+    if (asking.asksAboutSomeoneElse) {
+      this.#deps.log.say("about_others_refused", { memberH, handles: asking.handles.length });
+      return reply(ABOUT_OTHERS_REFUSAL);
+    }
+
     const saved = this.#deps.cache.memoriesOf(memberH).length;
-    const sheet = buildFactsSheet(this.#deps.cache.state(), memberH, this.#deps.clock.now(), saved);
+    const community = await lookUpCommunityKnowledge(this.#deps.memory, this.#deps.communityKey, this.#deps.cache.state(), message.text);
+    this.#deps.log.say("community_lookup", {
+      memberH,
+      candidates: community.candidates,
+      publicItems: community.items.length,
+      distances: community.items.map((item) => item.distance).join(","),
+      themes: community.themes.length,
+      activeAnswers: community.answersConsidered,
+      maxDistance: KNOWN_ISSUE_MAX_DISTANCE,
+    });
+    const sheet = buildFactsSheet(this.#deps.cache.state(), memberH, this.#deps.clock.now(), saved, community);
     const suffix = partial ? `\n\n${ERRORS.MEMORY_PARTIAL.message}` : "";
     const fallback = `${ERRORS.MODEL_UNAVAILABLE.message} ${templateReply(sheet)}${suffix}`;
     if (modelDown) return reply(fallback);
@@ -488,6 +540,20 @@ export class MemberService {
       tried: answered.value.tried.map((attempt) => `${attempt.model}:${attempt.outcome}`).join(" "),
     });
     return reply(`${answered.value.text.trim()}${suffix}`);
+  }
+
+  #knownNames(): readonly string[] {
+    return this.#deps.directory.userNames();
+  }
+
+  #otherNames(memberH: string): readonly string[] {
+    const names: string[] = [];
+    for (const known of this.#deps.cache.state().members.keys()) {
+      if (known === memberH) continue;
+      const seen = this.#deps.directory.byMemberH(known);
+      if (seen?.userName != null) names.push(seen.userName);
+    }
+    return names;
   }
 
   #speak(message: IncomingMessage, text: string): MemberAction {

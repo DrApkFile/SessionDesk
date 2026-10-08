@@ -1,3 +1,4 @@
+import type { ButtonChoice } from "../../platform/platform.js";
 import { duePromises, managerReminder, memberReminder, type DuePromise } from "../../core/followUps.js";
 import { mayDirectMessage } from "../../core/consent.js";
 import type { Clock } from "../../core/ports.js";
@@ -12,7 +13,7 @@ export interface SentReminder {
   readonly promiseId: string;
 }
 
-export type ReminderSender = (chatId: string, text: string) => Promise<void>;
+export type ReminderSender = (chatId: string, text: string, choices?: readonly ButtonChoice[]) => Promise<void>;
 
 export interface FollowUpDeps {
   readonly cache: LedgerCache;

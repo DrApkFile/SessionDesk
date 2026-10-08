@@ -1,4 +1,5 @@
 import type { Clock, Sleep } from "../../core/ports.js";
+import type { ItemVisibility } from "../../core/vocabulary.js";
 import { PENDING_BUFFER_LIMIT, PENDING_MAX_ATTEMPTS, PENDING_RETRY_BACKOFF_MS } from "../../core/tuning.js";
 import type { Log } from "./log.js";
 
@@ -9,6 +10,7 @@ export interface HeldMessage {
   readonly messageId: string;
   readonly receivedAt: Date;
   readonly replyToMemberH: string | null;
+  readonly visibility: ItemVisibility;
   attempts: number;
 }
 

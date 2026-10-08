@@ -8,7 +8,7 @@ private notes. Built for Walrus Sessions 8, "Chatbots That Remember".
 Build steps 1-5 of 7 done (PRD §12), plus the P1 items that matter for a real community: config,
 the pure core, the Walrus memory layer, the member bot, the manager bot, deployment, the evidence
 script, JUDGING.md, /report and the follow-up scheduler. Deployed on Render.
-`npm run gate` is green: typecheck, no-comments check, .env-not-tracked check, and 571 unit and
+`npm run gate` is green: typecheck, no-comments check, .env-not-tracked check, and 598 unit and
 adversarial tests (no network), run 2026-10-08 on Node 24.19.0 / Linux.
 The restore test has been run once against Walrus mainnet: evidence/restore-test-5c2ff4cb.json
 (6 blobs written, 35.7 s per write, cache wiped and rebuilt, status still correct).
@@ -50,11 +50,19 @@ The restore test has been run once against Walrus mainnet: evidence/restore-test
   they agreed to DMs, saying honestly that it is still open and the team has been reminded. A
   DM_ADDRESS line in the member's own namespace keeps them reachable across restarts
 - Community answers: when a manager answers a member's question, or a member's reply is thanked,
-  the answer becomes community memory. The next person to ask gets the earlier answer, who gave
-  it, the date and a Walruscan receipt, but only when exactly one answer is close enough.
-  /answers lists them, /retire stops one being reused
+  the answer becomes community memory. A manager confirms it with /confirm before it is ever
+  reused, so an answer nobody has vouched for stays inert. The next person to ask gets the
+  confirmed answer, who gave it, the date and a Walruscan receipt, but only when exactly one
+  answer is close enough and the question carries at least two words of its own.
+  /answers lists them with whether each is confirmed, /retire stops one being reused
+- When two confirmed answers are both close enough, the member is told the team has been asked to
+  confirm and is shown neither; the managers get both answers with Keep and Retire buttons
 - Known issues: a bug report that clearly matches an open item is linked to it (+1 affected)
   instead of opening a duplicate, and the reporter is told the current status
+- Community knowledge: a member asking about something the community raised gets its current
+  status even if they never filed it. Reported in the group means public; reported in a direct
+  message means private, visible only to the reporter and the managers. A question about another
+  person is refused in code: "I don't share details about other members."
 - A relayer 429 is treated as a budget problem: the queue pauses for exactly the backoff the
   relayer asked for and the write stays pending, never failed
 

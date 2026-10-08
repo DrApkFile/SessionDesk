@@ -22,11 +22,15 @@ export const EVENT_TYPES = [
   "MANAGER_ADDED",
   "MANAGER_REMOVED",
   "COMMUNITY_SET",
+  "ANSWER_CONFIRMED",
 ] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
 
 export const ITEM_STATUSES = ["reported", "acknowledged", "fixed", "verified", "duplicate", "wont_fix"] as const;
 export type ItemStatus = (typeof ITEM_STATUSES)[number];
+
+export const ITEM_VISIBILITIES = ["public", "private"] as const;
+export type ItemVisibility = (typeof ITEM_VISIBILITIES)[number];
 
 export const ITEM_KINDS = ["bug", "feature", "feedback"] as const;
 export type ItemKind = (typeof ITEM_KINDS)[number];
@@ -49,7 +53,7 @@ export type PromiseState = (typeof PROMISE_STATES)[number];
 export const ANSWER_SOURCES = ["manager", "member"] as const;
 export type AnswerSource = (typeof ANSWER_SOURCES)[number];
 
-export const ANSWER_STATES = ["active", "retired"] as const;
+export const ANSWER_STATES = ["pending", "active", "retired"] as const;
 export type AnswerState = (typeof ANSWER_STATES)[number];
 
 export const MESSAGE_KINDS = ["question", "bug", "feature", "feedback", "thanks", "profile", "chit_chat", "other"] as const;

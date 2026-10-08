@@ -14,6 +14,7 @@ function context(overrides: Partial<GateContext> = {}): GateContext {
     helperPairDayCounts: new Map(),
     day: "2026-10-07",
     ids: countingIds(),
+    visibility: "public",
     ...overrides,
   };
 }
@@ -36,10 +37,17 @@ describe("write gate", () => {
     if (!planned.ok) return;
     expect(planned.value).toEqual([
       {
-        draft: { type: "ITEM_OPENED", itemId: "i1", kind: "bug", themeId: "t1", text: "android login fails on 2.3" },
+        draft: { type: "ITEM_OPENED", itemId: "i1", kind: "bug", themeId: "t1", text: "android login fails on 2.3", visibility: "public" },
         namespaces: [{ kind: "member", memberH: MEMBER }, { kind: "items" }],
       },
     ]);
+  });
+
+  it("marks an item reported in the group public and one reported in a direct message private", () => {
+    const inGroup = planWrites({ kind: "bug", themeLabel: "android login" }, "login fails", context({ visibility: "public" }));
+    const inDm = planWrites({ kind: "bug", themeLabel: "android login" }, "login fails", context({ visibility: "private" }));
+    expect(inGroup.ok && inGroup.value[0]?.draft).toMatchObject({ visibility: "public" });
+    expect(inDm.ok && inDm.value[0]?.draft).toMatchObject({ visibility: "private" });
   });
 
   it("reuses an existing theme and creates one only when the label is new", () => {

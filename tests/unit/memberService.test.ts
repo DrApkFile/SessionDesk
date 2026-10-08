@@ -89,11 +89,10 @@ describe("F01 the member is answered before walrus has the write", () => {
     const field = harness({ classification: '{"kind":"bug","themeLabel":"login"}', replyText: "Filed.", memory: { writeDelayMs: 40 } });
     field.service.recordConsent(MEMBER, MEMBER, 1, "storage");
     const memberH = field.service.memberHashOf(MEMBER);
-    const started = Date.now();
     const action = await field.service.handle(field.message({ chatId: MEMBER, chatType: "private", text: "android login fails" }));
     expect(action.kind).toBe("reply");
-    expect(Date.now() - started).toBeLessThan(40);
     expect(field.cache.memoriesOf(memberH).some((line) => line.state === "saving")).toBe(true);
+    expect(field.cache.memoriesOf(memberH).every((line) => line.blobId === null)).toBe(true);
     await field.queue.settled();
     expect(field.cache.memoriesOf(memberH).every((line) => line.state === "saved")).toBe(true);
   });

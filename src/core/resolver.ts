@@ -68,6 +68,7 @@ function apply(state: CommunityState, entry: LedgerEntry, seenBySeq: Map<number,
         state.items.set(event.itemId, {
           itemId: event.itemId,
           kind: event.kind,
+          visibility: event.visibility ?? "public",
           themeId: event.themeId,
           text: event.text,
           status: FIRST_ITEM_STATUS,
@@ -167,7 +168,7 @@ function apply(state: CommunityState, entry: LedgerEntry, seenBySeq: Map<number,
         themeId: event.themeId,
         seq: event.seq,
         ts: event.ts,
-        state: "active",
+        state: event.confirmed === true ? "active" : "pending",
         retiredTs: null,
         helpful: 0,
         unhelpful: 0,
@@ -176,9 +177,15 @@ function apply(state: CommunityState, entry: LedgerEntry, seenBySeq: Map<number,
     }
     case "ANSWER_RETIRED": {
       const answer = state.answers.get(event.answerId);
-      if (answer === undefined || answer.state !== "active") return reject(state);
+      if (answer === undefined || answer.state === "retired") return reject(state);
       answer.state = "retired";
       answer.retiredTs = event.ts;
+      return;
+    }
+    case "ANSWER_CONFIRMED": {
+      const answer = state.answers.get(event.answerId);
+      if (answer === undefined || answer.state !== "pending") return reject(state);
+      answer.state = "active";
       return;
     }
     case "ANSWER_FEEDBACK": {
