@@ -15,6 +15,6 @@ describe("F11 who may create which event", () => {
   });
 
   it("leaves consent and corrections to the member's own commands", () => {
-    expect(eventTypesFrom("member_command")).toEqual(["CONSENT_GIVEN", "CORRECTION", "DM_ADDRESS"]);
+    expect(eventTypesFrom("member_command")).toEqual(["CONSENT_GIVEN", "CORRECTION", "DM_ADDRESS", "DM_HANDLE"]);
   });
 });

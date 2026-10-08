@@ -4,6 +4,7 @@ import { guardStoredText } from "../../core/redactor.js";
 import { clipStoredText } from "../../core/text.js";
 import { isProfileField } from "../../core/vocabulary.js";
 import type { MemberDeps } from "./deps.js";
+import { userKey } from "../../platform/platform.js";
 import { describeLine } from "./describe.js";
 import { commandOf, isPrivate, pinnedNotice, reply, type IncomingMessage, type MemberAction } from "../shared/incoming.js";
 import {
@@ -33,7 +34,7 @@ export function memberCommands(deps: MemberDeps, message: IncomingMessage, membe
 
 function optin(deps: MemberDeps, message: IncomingMessage): MemberAction {
   if (isPrivate(message)) return reply(CONSENT_NOTICE, true);
-  if (!deps.managerIds.includes(message.userId)) {
+  if (!deps.managerIds.includes(userKey(message.platform, message.userId))) {
     deps.log.say("optin_refused", { chat: String(message.chatId), reason: "not a manager" });
     return { kind: "silent", reason: "optin is for managers only" };
   }

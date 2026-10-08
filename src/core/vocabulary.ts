@@ -17,6 +17,11 @@ export const EVENT_TYPES = [
   "ITEM_AFFECTS",
   "DM_ADDRESS",
   "ANSWER_FEEDBACK",
+  "DM_HANDLE",
+  "OWNER_SET",
+  "MANAGER_ADDED",
+  "MANAGER_REMOVED",
+  "COMMUNITY_SET",
 ] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
 

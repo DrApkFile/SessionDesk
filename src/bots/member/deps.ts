@@ -25,6 +25,7 @@ export interface MemberDeps {
   readonly ids: IdSource;
   readonly directory: MemberDirectory;
   readonly memory: MemoryPort;
-  readonly managerIds: readonly number[];
+  readonly managerIds: readonly string[];
   readonly self: BotHandle;
+  readonly directMessagesNeedOptIn: boolean;
 }

@@ -8,16 +8,16 @@ import type { Log } from "./log.js";
 
 export interface SentReminder {
   readonly audience: "manager" | "member";
-  readonly chatId: number;
+  readonly chatId: string;
   readonly promiseId: string;
 }
 
-export type ReminderSender = (chatId: number, text: string) => Promise<void>;
+export type ReminderSender = (chatId: string, text: string) => Promise<void>;
 
 export interface FollowUpDeps {
   readonly cache: LedgerCache;
   readonly directory: MemberDirectory;
-  readonly managerIds: readonly number[];
+  readonly managerIds: readonly string[];
   readonly clock: Clock;
   readonly log: Log;
   readonly toManager: ReminderSender;
@@ -81,7 +81,7 @@ export class FollowUpScheduler {
       this.#deps.log.say("followup_member_skipped", { promiseId: due.promise.promiseId, reason: "no dm consent on record" });
       return null;
     }
-    const fromLedger = member.dmUserId;
+    const fromLedger = member.dmAddress?.address ?? (member.dmUserId === null ? null : String(member.dmUserId));
     const fromDirectory = this.#deps.directory.byMemberH(due.promise.memberH)?.userId ?? null;
     const chatId = fromLedger ?? fromDirectory;
     if (chatId === null) {
@@ -91,7 +91,7 @@ export class FollowUpScheduler {
     return this.#send(this.#deps.toMember, chatId, memberReminder(due), "member", due);
   }
 
-  async #send(sender: ReminderSender, chatId: number, text: string, audience: "manager" | "member", due: DuePromise): Promise<SentReminder | null> {
+  async #send(sender: ReminderSender, chatId: string, text: string, audience: "manager" | "member", due: DuePromise): Promise<SentReminder | null> {
     try {
       await sender(chatId, text);
       this.#deps.log.say("followup_sent", { audience, promiseId: due.promise.promiseId, overdue: due.overdue });

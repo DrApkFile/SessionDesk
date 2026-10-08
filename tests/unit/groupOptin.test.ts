@@ -18,9 +18,10 @@ const OTHER_GROUP = -1009999999999;
 
 function tap(field: Harness, scope: "storage" | "storage_and_dm", overrides: { chatId?: number; chatType?: "private" | "supergroup"; userId?: number } = {}) {
   return field.service.consentFromTap({
+    platform: "telegram",
     userId: overrides.userId ?? MEMBER,
     chatId: overrides.chatId ?? GROUP_CHAT_ID,
-    chatType: overrides.chatType ?? "supergroup",
+    chatKind: (overrides.chatType ?? "supergroup") === "private" ? "direct" : "community",
     messageId: 77,
     scope,
   });

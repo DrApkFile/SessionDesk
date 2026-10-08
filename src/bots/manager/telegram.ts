@@ -1,11 +1,8 @@
 import { Bot, type Context } from "grammy";
 import type { Log } from "../shared/log.js";
-import { CHAT_TYPES, type BotAction, type ChatType, type IncomingMessage } from "../shared/incoming.js";
+import type { BotAction, IncomingMessage } from "../shared/incoming.js";
+import { chatKindOfTelegram } from "../../platform/telegramShapes.js";
 import type { ManagerService } from "./service.js";
-
-function chatTypeOf(raw: string): ChatType {
-  return (CHAT_TYPES as readonly string[]).includes(raw) ? (raw as ChatType) : "channel";
-}
 
 export function toManagerIncoming(context: Context): IncomingMessage | null {
   const message = context.message;
@@ -16,15 +13,16 @@ export function toManagerIncoming(context: Context): IncomingMessage | null {
   if (text.length === 0) return null;
   const replyTo = message.reply_to_message;
   return {
-    chatId: chat.id,
-    chatType: chatTypeOf(chat.type),
-    messageId: message.message_id,
-    userId: from.id,
+    platform: "telegram",
+    chatId: String(chat.id),
+    chatKind: chatKindOfTelegram(chat.type),
+    messageId: String(message.message_id),
+    userId: String(from.id),
     isBot: from.is_bot,
     userName: from.username ?? null,
     text,
     mentionsBot: true,
-    replyToUserId: replyTo?.from?.id ?? null,
+    replyToUserId: replyTo?.from?.id === undefined ? null : String(replyTo.from.id),
     replyToIsBot: replyTo?.from?.is_bot ?? false,
     replyToText: replyTo?.text ?? replyTo?.caption ?? null,
   };

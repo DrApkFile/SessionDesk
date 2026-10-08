@@ -13,7 +13,7 @@ export interface StatusProbe {
 
 export interface ManagerDeps {
   readonly communityKey: string;
-  readonly managerIds: readonly number[];
+  readonly managerIds: readonly string[];
   readonly cache: LedgerCache;
   readonly notesCache: LedgerCache;
   readonly pipeline: EventPipeline;
@@ -24,10 +24,12 @@ export interface ManagerDeps {
   readonly ids: IdSource;
   readonly directory: MemberDirectory;
   readonly status: StatusProbe;
+  readonly namespaceSecret: string;
+  readonly setupCode: string | null;
 }
 
 export interface ManagerContext {
   readonly message: IncomingMessage;
-  readonly managerId: number;
+  readonly managerId: string;
   readonly replyToMemberH: string | null;
 }

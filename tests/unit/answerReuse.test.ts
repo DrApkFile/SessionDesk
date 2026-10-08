@@ -122,7 +122,7 @@ describe("an earlier answer is reused when it clearly matches", () => {
       seq: 500,
       namespace: ANSWERS_NAMESPACE,
       memberH: null,
-      event: { type: "ANSWER_RETIRED", answerId, byManagerId: MANAGER_ID, seq: 500, ts: "2026-10-08T10:00:00.000Z" },
+      event: { type: "ANSWER_RETIRED", answerId, byManagerId: String(MANAGER_ID), seq: 500, ts: "2026-10-08T10:00:00.000Z" },
       state: "saved",
       blobId: "bretire",
       code: null,

@@ -194,7 +194,36 @@ function apply(state: CommunityState, entry: LedgerEntry, seenBySeq: Map<number,
     }
     case "DM_ADDRESS": {
       if (memberH === null) return reject(state);
-      memberIn(state, memberH).dmUserId = event.telegramUserId;
+      const member = memberIn(state, memberH);
+      member.dmUserId = event.telegramUserId;
+      member.dmAddress = { platform: "telegram", address: String(event.telegramUserId) };
+      return;
+    }
+    case "DM_HANDLE": {
+      if (memberH === null) return reject(state);
+      memberIn(state, memberH).dmAddress = { platform: event.platform, address: event.address };
+      return;
+    }
+    case "OWNER_SET": {
+      if (state.governance.ownerH !== null) return reject(state);
+      state.governance.ownerH = event.ownerH;
+      state.governance.managerHs.add(event.ownerH);
+      return;
+    }
+    case "MANAGER_ADDED": {
+      if (state.governance.ownerH !== event.byOwnerH) return reject(state);
+      state.governance.managerHs.add(event.managerH);
+      return;
+    }
+    case "MANAGER_REMOVED": {
+      if (state.governance.ownerH !== event.byOwnerH) return reject(state);
+      if (event.managerH === state.governance.ownerH) return reject(state);
+      if (!state.governance.managerHs.delete(event.managerH)) return reject(state);
+      return;
+    }
+    case "COMMUNITY_SET": {
+      if (!state.governance.managerHs.has(event.bySetterH)) return reject(state);
+      state.governance.community = { platform: event.platform, chatId: event.chatId };
       return;
     }
     case "MANAGER_NOTE": {

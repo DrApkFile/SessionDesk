@@ -16,7 +16,7 @@ export function mayDirectMessage(facts: ConsentFacts): boolean {
   return facts.consented && facts.dmConsent;
 }
 
-export function requireManager(managerIds: readonly number[], telegramUserId: number): Result<number> {
-  if (!managerIds.includes(telegramUserId)) return refuse("NOT_MANAGER");
-  return ok(telegramUserId);
+export function requireManager(managerIds: readonly string[], userId: string): Result<string> {
+  if (!managerIds.includes(userId)) return refuse("NOT_MANAGER");
+  return ok(userId);
 }

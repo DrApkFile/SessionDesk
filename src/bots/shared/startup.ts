@@ -19,34 +19,49 @@ export function requirePrivacyDisabled(identity: BotIdentity): Result<BotIdentit
   return ok(identity);
 }
 
+export type CommunityFromSetup = () => { readonly platform: string; readonly chatId: string } | null;
+
 export class CommunityChat {
-  readonly #configured: number;
-  #migratedTo: number | null = null;
+  readonly #configured: string | null;
+  readonly #fromSetup: CommunityFromSetup;
+  #migratedTo: string | null = null;
 
-  constructor(configured: number) {
-    this.#configured = configured;
+  constructor(configured: string | number | null, fromSetup: CommunityFromSetup = () => null) {
+    this.#configured = configured === null ? null : String(configured);
+    this.#fromSetup = fromSetup;
   }
 
-  expected(): number {
-    return this.#configured;
+  source(): "env" | "setup" | "unset" {
+    if (this.#configured !== null) return "env";
+    return this.#fromSetup() === null ? "unset" : "setup";
   }
 
-  migratedTo(): number | null {
+  expected(): string | null {
+    if (this.#configured !== null) return this.#configured;
+    return this.#fromSetup()?.chatId ?? null;
+  }
+
+  migratedTo(): string | null {
     return this.#migratedTo;
   }
 
-  recordMigration(newChatId: number): void {
-    this.#migratedTo = newChatId;
+  recordMigration(newChatId: string | number): void {
+    this.#migratedTo = String(newChatId);
   }
 
-  check(chatId: number): Result<number> {
+  check(rawChatId: string | number): Result<string> {
+    const chatId = String(rawChatId);
     if (this.#migratedTo !== null) {
       if (chatId === this.#migratedTo) {
         return refuse("MEMORY_UNAVAILABLE", `this group migrated to ${this.#migratedTo}. Set COMMUNITY_CHAT_ID=${this.#migratedTo} and restart.`);
       }
       return refuse("MEMORY_UNAVAILABLE", `chat ${chatId} is not this community; it migrated to ${this.#migratedTo}`);
     }
-    if (chatId !== this.#configured) return refuse("MEMORY_UNAVAILABLE", `chat ${chatId} is not the configured community chat ${this.#configured}`);
+    const expected = this.expected();
+    if (expected === null) {
+      return refuse("MEMORY_UNAVAILABLE", "no community chat is set yet: a manager should send /setup in the group");
+    }
+    if (chatId !== expected) return refuse("MEMORY_UNAVAILABLE", `chat ${chatId} is not the community chat ${expected}`);
     return ok(chatId);
   }
 }

@@ -1,7 +1,8 @@
 import { Bot, InlineKeyboard, type Context } from "grammy";
 import type { Log } from "../shared/log.js";
 import { requirePrivacyDisabled, type BotHandle, type BotIdentity, type CommunityChat } from "../shared/startup.js";
-import { CHAT_TYPES, type ChatType, type IncomingMessage, type MemberAction } from "../shared/incoming.js";
+import type { IncomingMessage, MemberAction } from "../shared/incoming.js";
+import { chatKindOfTelegram } from "../../platform/telegramShapes.js";
 import { CONSENT_SCOPES, dmStartLink, type ConsentScope } from "./notices.js";
 import type { MemberService } from "./service.js";
 
@@ -13,10 +14,6 @@ export function consentKeyboard(botUsername: string): InlineKeyboard {
     .text("I agree + DMs", `${CONSENT_PREFIX}storage_and_dm`)
     .row()
     .url("Open DMs with me", dmStartLink(botUsername));
-}
-
-function chatTypeOf(raw: string): ChatType {
-  return (CHAT_TYPES as readonly string[]).includes(raw) ? (raw as ChatType) : "channel";
 }
 
 export function readMention(text: string, entities: ReadonlyArray<{ type: string; offset: number; length: number }>, username: string): boolean {
@@ -36,15 +33,16 @@ export function toIncoming(context: Context, identity: BotIdentity): IncomingMes
   const entities = message.entities ?? message.caption_entities ?? [];
   const replyTo = message.reply_to_message;
   return {
-    chatId: chat.id,
-    chatType: chatTypeOf(chat.type),
-    messageId: message.message_id,
-    userId: from.id,
+    platform: "telegram",
+    chatId: String(chat.id),
+    chatKind: chatKindOfTelegram(chat.type),
+    messageId: String(message.message_id),
+    userId: String(from.id),
     isBot: from.is_bot,
     userName: from.username ?? null,
     text,
     mentionsBot: readMention(text, entities, identity.username) || replyTo?.from?.id === identity.id,
-    replyToUserId: replyTo?.from?.id ?? null,
+    replyToUserId: replyTo?.from?.id === undefined ? null : String(replyTo.from.id),
     replyToIsBot: replyTo?.from?.is_bot ?? false,
     replyToText: replyTo?.text ?? replyTo?.caption ?? null,
   };
@@ -104,10 +102,11 @@ export async function buildMemberBot(token: string, service: MemberService, log:
       return;
     }
     const outcome = service.consentFromTap({
-      userId: from.id,
-      chatId: context.chat?.id ?? from.id,
-      chatType: chatTypeOf(context.chat?.type ?? "private"),
-      messageId: context.callbackQuery.message?.message_id ?? 0,
+      platform: "telegram",
+      userId: String(from.id),
+      chatId: String(context.chat?.id ?? from.id),
+      chatKind: chatKindOfTelegram(context.chat?.type ?? "private"),
+      messageId: String(context.callbackQuery.message?.message_id ?? 0),
       scope,
     });
     if (outcome.ignored) {

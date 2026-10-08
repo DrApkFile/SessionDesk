@@ -8,13 +8,13 @@ const MEMBER_ID = 42_000_001;
 
 function openItem(field: ManagerHarness, itemId = "i-abc123", text = "android login fails"): string {
   const memberH = field.memberHashOf(MEMBER_ID);
-  field.directory.remember({ userId: MEMBER_ID, memberH, userName: "ada" }, field.clock.now());
+  field.directory.remember({ platform: "telegram", userId: String(MEMBER_ID), memberH, userName: "ada" }, field.clock.now());
   field.pipeline.commit(
     [
       { draft: { type: "THEME_CREATED", themeId: "t-login", label: "android login" }, namespaces: [{ kind: "themes" }] },
       { draft: { type: "ITEM_OPENED", itemId, kind: "bug", themeId: "t-login", text }, namespaces: [{ kind: "member", memberH }, { kind: "items" }] },
     ],
-    { chatId: -100, messageId: 1 },
+    { chatId: "-100", messageId: "1" },
     field.clock.now(),
   );
   return memberH;
@@ -97,7 +97,7 @@ describe("promises", () => {
     const promise = [...field.cache.state().promises.values()][0];
     expect(promise?.memberH).toBe(memberH);
     expect(promise?.itemId).toBe("i-abc123");
-    expect(promise?.byManagerId).toBe(MANAGER_ID);
+    expect(promise?.byManagerId).toBe(String(MANAGER_ID));
   });
 
   it("refuses a date in the past, too far ahead, or not a date", async () => {
@@ -136,8 +136,8 @@ describe("promises", () => {
     const field = managerHarness();
     const memberH = openItem(field);
     field.pipeline.commit(
-      [{ draft: { type: "PROMISE_MADE", promiseId: "p-old", memberH, due: "2026-10-01", text: "last week", byManagerId: MANAGER_ID }, namespaces: [{ kind: "member", memberH }] }],
-      { chatId: -100, messageId: 2 },
+      [{ draft: { type: "PROMISE_MADE", promiseId: "p-old", memberH, due: "2026-10-01", text: "last week", byManagerId: String(MANAGER_ID) }, namespaces: [{ kind: "member", memberH }] }],
+      { chatId: "-100", messageId: "2" },
       field.clock.now(),
     );
     await field.ask("/promise i-abc123 2026-10-09 thursday check");
@@ -222,7 +222,7 @@ describe("reports", () => {
   it("shows helpers once anyone has points", async () => {
     const field = managerHarness();
     const memberH = openItem(field);
-    field.pipeline.commit([{ draft: { type: "CONTRIBUTION", kind: "helped" }, namespaces: [{ kind: "member", memberH }] }], { chatId: -100, messageId: 3 }, field.clock.now());
+    field.pipeline.commit([{ draft: { type: "CONTRIBUTION", kind: "helped" }, namespaces: [{ kind: "member", memberH }] }], { chatId: "-100", messageId: "3" }, field.clock.now());
     expect(await field.ask("/helpers")).toContain("@ada (");
   });
 });
@@ -315,7 +315,7 @@ describe("the weekly report is drafted from counted data", () => {
 function recordAnswer(field: ManagerHarness, answerId = "a-1", questionText = "how do I reset my password?"): void {
   field.pipeline.commit(
     [{ draft: { type: "ANSWER", answerId, questionText, answerText: "Open settings, then Account, then Reset.", answeredBy: "manager", themeId: "t-login" }, namespaces: [{ kind: "answers" }] }],
-    { chatId: -100, messageId: 50 },
+    { chatId: "-100", messageId: "50" },
     field.clock.now(),
   );
 }
@@ -369,7 +369,7 @@ describe("the manager curates the community's answers", () => {
 
 describe("affected counts are visible to the manager", () => {
   function affect(field: ManagerHarness, itemId: string, memberH: string): void {
-    field.pipeline.commit([{ draft: { type: "ITEM_AFFECTS", itemId, memberH }, namespaces: [{ kind: "items" }] }], { chatId: -100, messageId: 60 }, field.clock.now());
+    field.pipeline.commit([{ draft: { type: "ITEM_AFFECTS", itemId, memberH }, namespaces: [{ kind: "items" }] }], { chatId: "-100", messageId: "60" }, field.clock.now());
   }
 
   it("/themes shows how many extra members an item affects", async () => {

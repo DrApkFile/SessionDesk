@@ -1,5 +1,7 @@
+import type { DmAddress } from "./dmAddress.js";
 import type { LedgerEvent } from "./events.js";
 import { FIRST_TIER } from "./tier.js";
+import type { Platform } from "../platform/platform.js";
 import type { AnswerSource, AnswerState, ItemKind, ItemStatus, MemberTier, ProfileField, PromiseState } from "./vocabulary.js";
 
 export interface LedgerEntry {
@@ -17,6 +19,7 @@ export interface MemberFacts {
   readonly activeDays: Set<string>;
   points: number;
   dmUserId: number | null;
+  dmAddress: DmAddress | null;
   readonly itemIds: string[];
   readonly helperPairDayCounts: Map<string, number>;
   lastSeq: number;
@@ -43,7 +46,7 @@ export interface PromiseRecord {
   readonly itemId: string | null;
   readonly due: string;
   readonly text: string;
-  readonly byManagerId: number;
+  readonly byManagerId: string;
   state: PromiseState;
   readonly madeSeq: number;
   readonly madeTs: string;
@@ -79,6 +82,17 @@ export interface NoteRecord {
   readonly text: string;
 }
 
+export interface CommunityWhere {
+  readonly platform: Platform;
+  readonly chatId: string;
+}
+
+export interface Governance {
+  ownerH: string | null;
+  readonly managerHs: Set<string>;
+  community: CommunityWhere | null;
+}
+
 export interface CommunityState {
   readonly members: Map<string, MemberFacts>;
   readonly items: Map<string, ItemFacts>;
@@ -86,12 +100,23 @@ export interface CommunityState {
   readonly themes: Map<string, ThemeFacts>;
   readonly answers: Map<string, AnswerRecord>;
   readonly notes: NoteRecord[];
+  readonly governance: Governance;
   maxSeq: number;
   rejectedEvents: number;
 }
 
 export function emptyState(): CommunityState {
-  return { members: new Map(), items: new Map(), promises: new Map(), themes: new Map(), answers: new Map(), notes: [], maxSeq: 0, rejectedEvents: 0 };
+  return {
+    members: new Map(),
+    items: new Map(),
+    promises: new Map(),
+    themes: new Map(),
+    answers: new Map(),
+    notes: [],
+    governance: { ownerH: null, managerHs: new Set(), community: null },
+    maxSeq: 0,
+    rejectedEvents: 0,
+  };
 }
 
 export function emptyMember(memberH: string): MemberFacts {
@@ -105,6 +130,7 @@ export function emptyMember(memberH: string): MemberFacts {
     activeDays: new Set(),
     points: 0,
     dmUserId: null,
+    dmAddress: null,
     itemIds: [],
     helperPairDayCounts: new Map(),
     lastSeq: 0,

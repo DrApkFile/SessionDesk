@@ -49,3 +49,5 @@ export const KNOWN_ISSUE_SEARCH_LIMIT = 5;
 export const PLAIN_RECALL_TOP_K = 5;
 
 export const ANSWER_FEEDBACK_WINDOW_MINUTES = 30;
+
+export const MYDATA_TEXT_CHARS = 160;

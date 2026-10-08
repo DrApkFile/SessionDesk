@@ -57,7 +57,7 @@ describe("event codec", () => {
   });
 
   it("omits absent optional fields from the line", () => {
-    const promise: LedgerEvent = { type: "PROMISE_MADE", seq: 3, ts: "2026-10-07T10:00:00.000Z", promiseId: "p1", memberH: "a".repeat(24), due: "2026-10-09", text: "we will check", byManagerId: 42 };
+    const promise: LedgerEvent = { type: "PROMISE_MADE", seq: 3, ts: "2026-10-07T10:00:00.000Z", promiseId: "p1", memberH: "a".repeat(24), due: "2026-10-09", text: "we will check", byManagerId: "42" };
     expect(encode(promise)).not.toContain("itemId=");
     expect(decode(encode(promise))).toEqual(promise);
   });

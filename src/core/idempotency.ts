@@ -3,8 +3,8 @@ import type { EventType } from "./vocabulary.js";
 
 export interface WriteOrigin {
   readonly communityKey: string;
-  readonly chatId: number;
-  readonly messageId: number;
+  readonly chatId: string | number;
+  readonly messageId: string | number;
   readonly eventType: EventType;
   readonly index: number;
 }

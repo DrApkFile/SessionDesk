@@ -1,7 +1,7 @@
 import type { EventDraft } from "./events.js";
 import type { EventType } from "./vocabulary.js";
 
-export const AUTHORITIES = ["write_gate", "member_command", "manager_command"] as const;
+export const AUTHORITIES = ["write_gate", "member_command", "manager_command", "setup_command"] as const;
 export type Authority = (typeof AUTHORITIES)[number];
 
 export const EVENT_AUTHORITY = {
@@ -23,6 +23,11 @@ export const EVENT_AUTHORITY = {
   ITEM_AFFECTS: "write_gate",
   DM_ADDRESS: "member_command",
   ANSWER_FEEDBACK: "write_gate",
+  DM_HANDLE: "member_command",
+  OWNER_SET: "setup_command",
+  MANAGER_ADDED: "setup_command",
+  MANAGER_REMOVED: "setup_command",
+  COMMUNITY_SET: "setup_command",
 } satisfies Record<EventType, Authority>;
 
 export type EventTypeFrom<A extends Authority> = {

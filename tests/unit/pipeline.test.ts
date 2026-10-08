@@ -26,7 +26,7 @@ describe("the write pipeline", () => {
         { draft: { type: "THEME_CREATED", themeId: "t1", label: "login" }, namespaces: [{ kind: "themes" }] },
         { draft: { type: "ITEM_OPENED", itemId: "i1", kind: "bug", themeId: "t1", text: "fails" }, namespaces: [{ kind: "member", memberH: MEMBER }, { kind: "items" }] },
       ],
-      { chatId: -100, messageId: 7 },
+      { chatId: "-100", messageId: "7" },
       now,
     );
     expect(recorded.map((write) => write.event.seq)).toEqual([5, 6]);
@@ -37,7 +37,7 @@ describe("the write pipeline", () => {
 
   it("writes exactly what the codec can read back", async () => {
     const { pipeline, memory, queue } = field();
-    pipeline.commit([{ draft: { type: "QUESTION_ASKED", themeId: "t1" }, namespaces: [{ kind: "member", memberH: MEMBER }] }], { chatId: -100, messageId: 1 }, now);
+    pipeline.commit([{ draft: { type: "QUESTION_ASKED", themeId: "t1" }, namespaces: [{ kind: "member", memberH: MEMBER }] }], { chatId: "-100", messageId: "1" }, now);
     await queue.settled();
     const stored = memory.stored.get(`sd-c1-m-${MEMBER}`)?.[0]?.text ?? "";
     expect(decode(stored)).toEqual({ type: "QUESTION_ASKED", themeId: "t1", seq: 5, ts: now.toISOString() });
@@ -47,7 +47,7 @@ describe("the write pipeline", () => {
     const { pipeline, memory, queue } = field();
     pipeline.commit(
       [{ draft: { type: "ITEM_OPENED", itemId: "i1", kind: "bug", themeId: "t1", text: "fails" }, namespaces: [{ kind: "member", memberH: MEMBER }, { kind: "items" }] }],
-      { chatId: -100, messageId: 7 },
+      { chatId: "-100", messageId: "7" },
       now,
     );
     await queue.settled();
@@ -58,7 +58,7 @@ describe("the write pipeline", () => {
   it("F01 returns before the write and leaves the line saving", async () => {
     const { pipeline, cache, queue } = field({ writeDelayMs: 30 });
     const started = Date.now();
-    pipeline.commit([{ draft: { type: "CONSENT_GIVEN", scope: "storage" }, namespaces: [{ kind: "member", memberH: MEMBER }] }], { chatId: -100, messageId: 1 }, now);
+    pipeline.commit([{ draft: { type: "CONSENT_GIVEN", scope: "storage" }, namespaces: [{ kind: "member", memberH: MEMBER }] }], { chatId: "-100", messageId: "1" }, now);
     expect(Date.now() - started).toBeLessThan(10);
     expect(cache.memoriesOf(MEMBER)[0]?.state).toBe("saving");
     await queue.settled();

@@ -1,23 +1,9 @@
-export const CHAT_TYPES = ["private", "group", "supergroup", "channel"] as const;
-export type ChatType = (typeof CHAT_TYPES)[number];
+import { isDirect, type ChatKind, type PlatformAction, type PlatformMessage } from "../../platform/platform.js";
 
-export interface IncomingMessage {
-  readonly chatId: number;
-  readonly chatType: ChatType;
-  readonly messageId: number;
-  readonly userId: number;
-  readonly isBot: boolean;
-  readonly userName: string | null;
-  readonly text: string;
-  readonly mentionsBot: boolean;
-  readonly replyToUserId: number | null;
-  readonly replyToIsBot: boolean;
-  readonly replyToText: string | null;
-}
-
-export type BotAction =
-  | { readonly kind: "silent"; readonly reason: string }
-  | { readonly kind: "reply"; readonly text: string; readonly offerConsent: boolean; readonly pin?: boolean };
+export type IncomingMessage = PlatformMessage;
+export type BotAction = PlatformAction;
+export type MemberAction = PlatformAction;
+export type { ChatKind };
 
 export function silent(reason: string): BotAction {
   return { kind: "silent", reason };
@@ -44,11 +30,9 @@ export function commandOf(text: string): { readonly name: string; readonly rest:
 }
 
 export function isPrivate(message: IncomingMessage): boolean {
-  return message.chatType === "private";
+  return isDirect(message);
 }
 
-export type MemberAction = BotAction;
-
 export function chatLabel(message: IncomingMessage): string {
-  return message.chatType === "private" ? "dm" : String(message.chatId);
+  return message.chatKind === "direct" ? "dm" : message.chatId;
 }

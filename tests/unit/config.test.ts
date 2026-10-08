@@ -26,8 +26,9 @@ describe("config", () => {
     const loaded = loadConfig(complete);
     expect(loaded.ok).toBe(true);
     if (!loaded.ok) return;
-    expect(loaded.config.telegram.managerIds).toEqual([4242, 4343]);
-    expect(loaded.config.telegram.communityChatId).toBe(-1001234567890);
+    expect(loaded.config.telegram?.managerIds).toEqual(["4242", "4343"]);
+    expect(loaded.config.telegram?.communityChatId).toBe(-1001234567890);
+    expect(loaded.config.enabled).toEqual({ telegram: true, discord: false, slack: false });
     expect(loaded.config.community.key).toBe("c1");
     expect(loaded.config.groq.model).toBe("qwen/qwen3.8-27b");
   });
@@ -36,14 +37,63 @@ describe("config", () => {
     const loaded = loadConfig({ COMMUNITY_KEY: "c1" });
     expect(loaded.ok).toBe(false);
     if (loaded.ok) return;
-    expect(loaded.problems).toHaveLength(15);
+    expect(loaded.problems).toHaveLength(11);
     expect(loaded.problems.join(" ")).toContain("NAMESPACE_SECRET");
+    expect(loaded.problems.join(" ")).not.toContain("TELEGRAM_MEMBER_BOT_TOKEN");
   });
 
   it("treats an empty or whitespace value as missing", () => {
     const loaded = loadConfig({ ...complete, GROQ_API_KEY: "   " });
     expect(loaded.ok).toBe(false);
     if (!loaded.ok) expect(loaded.problems.join(" ")).toContain("GROQ_API_KEY");
+  });
+
+  it("names the missing settings of an enabled platform, and only those", () => {
+    const withoutTelegram: Record<string, string> = { ...complete };
+    for (const key of ["TELEGRAM_MEMBER_BOT_TOKEN", "TELEGRAM_MANAGER_BOT_TOKEN", "MANAGER_TELEGRAM_IDS", "COMMUNITY_CHAT_ID"]) delete withoutTelegram[key];
+    const loaded = loadConfig(withoutTelegram);
+    expect(loaded.ok).toBe(false);
+    if (loaded.ok) return;
+    expect(loaded.problems).toHaveLength(4);
+    expect(loaded.problems.join(" ")).toContain("TELEGRAM_MEMBER_BOT_TOKEN");
+  });
+
+  it("asks for nothing from a platform that is switched off", () => {
+    const loaded = loadConfig({ ...complete, DISCORD_ENABLED: "false", SLACK_ENABLED: "false" });
+    expect(loaded.ok).toBe(true);
+    if (!loaded.ok) return;
+    expect(loaded.config.discord).toBeNull();
+    expect(loaded.config.slack).toBeNull();
+    expect(loaded.config.enabled.discord).toBe(false);
+  });
+
+  it("requires a platform's settings as soon as it is switched on", () => {
+    const loaded = loadConfig({ ...complete, DISCORD_ENABLED: "true" });
+    expect(loaded.ok).toBe(false);
+    if (loaded.ok) return;
+    expect(loaded.problems.join(" ")).toContain("DISCORD_BOT_TOKEN");
+    expect(loaded.problems.join(" ")).toContain("DISCORD_CHANNEL_ID");
+  });
+
+  it("accepts a discord-only deployment with telegram switched off", () => {
+    const loaded = loadConfig({
+      ...complete,
+      TELEGRAM_ENABLED: "false",
+      DISCORD_ENABLED: "true",
+      DISCORD_BOT_TOKEN: "d".repeat(60),
+      DISCORD_CHANNEL_ID: "123456789012345678",
+      DISCORD_MANAGER_IDS: "987654321098765432",
+    });
+    expect(loaded.ok).toBe(true);
+    if (!loaded.ok) return;
+    expect(loaded.config.telegram).toBeNull();
+    expect(loaded.config.discord?.channelId).toBe("123456789012345678");
+  });
+
+  it("refuses a deployment with every platform switched off", () => {
+    const loaded = loadConfig({ ...complete, TELEGRAM_ENABLED: "false" });
+    expect(loaded.ok).toBe(false);
+    if (!loaded.ok) expect(loaded.problems.join(" ")).toContain("every platform is disabled");
   });
 
   it("refuses the placeholder namespace secret from .env.example", () => {

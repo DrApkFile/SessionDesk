@@ -4,6 +4,8 @@ import { readFeedback } from "../../src/core/feedbackWords.js";
 import { internalLeakIn } from "../../src/core/replyGuard.js";
 import { PLAIN_STATUS } from "../../src/core/plainWords.js";
 import { ITEM_STATUSES } from "../../src/core/vocabulary.js";
+import { clipForMember, describePlainly } from "../../src/bots/member/describe.js";
+import { MYDATA_TEXT_CHARS } from "../../src/core/tuning.js";
 import { GROUP_CHAT_ID, MANAGER_ID, harness, type Harness } from "../support/memberHarness.js";
 
 const MEMBER = 42_000_001;
@@ -38,9 +40,9 @@ async function everyMemberFacingReply(): Promise<readonly string[]> {
   keep(optin.kind === "reply" && optin.text);
   const prompt = await field.service.handle(field.message({ userId: MEMBER, text: "@sdmemberbot hello", mentionsBot: true }));
   keep(prompt.kind === "reply" && prompt.text);
-  keep(field.service.consentFromTap({ userId: MEMBER, chatId: GROUP_CHAT_ID, chatType: "supergroup", messageId: 2, scope: "storage" }).alert);
-  keep(field.service.consentFromTap({ userId: MEMBER, chatId: GROUP_CHAT_ID, chatType: "supergroup", messageId: 3, scope: "storage" }).alert);
-  keep(field.service.consentFromTap({ userId: HELPER, chatId: GROUP_CHAT_ID, chatType: "supergroup", messageId: 4, scope: "storage_and_dm" }).alert);
+  keep(field.service.consentFromTap({ userId: MEMBER, chatId: GROUP_CHAT_ID, chatKind: "community", messageId: 2, scope: "storage" }).alert);
+  keep(field.service.consentFromTap({ userId: MEMBER, chatId: GROUP_CHAT_ID, chatKind: "community", messageId: 3, scope: "storage" }).alert);
+  keep(field.service.consentFromTap({ userId: HELPER, chatId: GROUP_CHAT_ID, chatKind: "community", messageId: 4, scope: "storage_and_dm" }).alert);
 
   for (const text of ["/help", "/mydata", "android login fails on 2.3", "i am a designer", "my key is ada@example.com", "/correct 99 nope", "/correct 1 nope", "/correct"]) {
     const action = await field.service.handle(field.message({ userId: MEMBER, chatId: MEMBER, chatType: "private", messageId: 10 + text.length, text }));
@@ -224,5 +226,74 @@ describe("did this help", () => {
     expect(readFeedback("that did not answer my question")).toBe("unhelpful");
     expect(readFeedback("thats not what i asked")).toBe("unhelpful");
     for (const unclear of ["", "the reset page is blank on android and I have tried twice today", "yes and no"]) expect(readFeedback(unclear)).toBe("unclear");
+  });
+});
+
+describe("/mydata shows what was actually stored", () => {
+  async function held(): Promise<Harness> {
+    const field = harness({ classification: '{"kind":"bug","themeLabel":"android login"}', replyText: "Filed." });
+    field.service.recordConsent(MEMBER, MEMBER, 1, "storage_and_dm");
+    await field.service.handle(field.message({ userId: MEMBER, chatKind: "direct", chatId: MEMBER, messageId: 2, text: "android login fails on 2.3" }));
+    field.classifyAs('{"kind":"profile","profile":{"field":"role","value":"designer"}}');
+    await field.service.handle(field.message({ userId: MEMBER, chatKind: "direct", chatId: MEMBER, messageId: 3, text: "i am a designer" }));
+    await field.queue.settled();
+    return field;
+  }
+
+  it("names the date, what kind of thing it was in plain words, and the text as saved", async () => {
+    const field = await held();
+    const action = await field.service.handle(field.message({ userId: MEMBER, chatKind: "direct", chatId: MEMBER, messageId: 9, text: "/mydata" }));
+    expect(action.kind).toBe("reply");
+    if (action.kind !== "reply") return;
+    expect(action.text).toContain("You agreed to");
+    expect(action.text).toContain('You reported: "android login fails on 2.3"');
+    expect(action.text).toContain('You told me what you do: "designer"');
+    expect(action.text).toContain("2026-10-08");
+    expect(action.text).toContain("https://walruscan.com/mainnet/blob/");
+    assertPlain(action.text);
+  });
+
+  it("numbers the lines so /correct can name one, without showing a sequence number", async () => {
+    const field = await held();
+    const action = await field.service.handle(field.message({ userId: MEMBER, chatKind: "direct", chatId: MEMBER, messageId: 10, text: "/mydata" }));
+    if (action.kind !== "reply") return;
+    expect(action.text).toMatch(/^1\. /m);
+    expect(action.text).toMatch(/^2\. /m);
+    expect(action.text).not.toMatch(/\bseq\b/);
+  });
+
+  it("clips a very long report rather than dumping it", () => {
+    const long = "x".repeat(400);
+    expect(clipForMember(long)).toHaveLength(MYDATA_TEXT_CHARS);
+    expect(clipForMember(long).endsWith("…")).toBe(true);
+    expect(clipForMember("short enough")).toBe("short enough");
+  });
+
+  it("says plainly which lines did not save", async () => {
+    const field = harness({ classification: '{"kind":"chit_chat"}', memory: { failWritesBefore: 99 } });
+    field.service.recordConsent(MEMBER, MEMBER, 1, "storage");
+    await field.queue.settled();
+    const action = await field.service.handle(field.message({ userId: MEMBER, chatKind: "direct", chatId: MEMBER, messageId: 11, text: "/mydata" }));
+    if (action.kind !== "reply") return;
+    expect(action.text).toContain("You agreed to");
+    expect(action.text).toContain("did NOT save");
+    assertPlain(action.text);
+  });
+
+  it("describes every event type without leaking a format", () => {
+    const samples: Parameters<typeof describePlainly>[0][] = [
+      { type: "CONSENT_GIVEN", scope: "storage", seq: 1, ts: "2026-10-08T09:00:00.000Z" },
+      { type: "ITEM_OPENED", itemId: "i-1", kind: "bug", themeId: "t-1", text: "login fails", seq: 2, ts: "2026-10-08T09:00:00.000Z" },
+      { type: "ITEM_STATUS", itemId: "i-1", status: "fixed", seq: 3, ts: "2026-10-08T09:00:00.000Z" },
+      { type: "PROMISE_MADE", promiseId: "p-1", memberH: "a".repeat(24), due: "2026-10-09", text: "we will look", byManagerId: "4242", seq: 4, ts: "2026-10-08T09:00:00.000Z" },
+      { type: "CONTRIBUTION", kind: "helped", seq: 5, ts: "2026-10-08T09:00:00.000Z" },
+      { type: "OWNER_SET", ownerH: "b".repeat(24), seq: 6, ts: "2026-10-08T09:00:00.000Z" },
+      { type: "DM_ADDRESS", telegramUserId: 42_000_001, seq: 7, ts: "2026-10-08T09:00:00.000Z" },
+    ];
+    for (const event of samples) {
+      const plain = describePlainly(event);
+      expect(plain.lead.length).toBeGreaterThan(4);
+      assertPlain(`${plain.lead}: ${plain.content ?? ""}`);
+    }
   });
 });

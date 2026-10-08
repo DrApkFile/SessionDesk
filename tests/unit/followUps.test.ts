@@ -14,7 +14,7 @@ const MANAGER_ID = 4242;
 function ledger(due: string, dmConsent: boolean, state: "open" | "fulfilled" = "open"): readonly LedgerEntry[] {
   const entries: LedgerEntry[] = [
     { memberH: MEMBER_H, event: { type: "CONSENT_GIVEN", scope: dmConsent ? "storage_and_dm" : "storage", seq: 1, ts: "2026-10-06T09:00:00.000Z" } },
-    { memberH: MEMBER_H, event: { type: "PROMISE_MADE", promiseId: "p-1", memberH: MEMBER_H, due, text: "we will check the login bug", byManagerId: MANAGER_ID, seq: 2, ts: "2026-10-06T10:00:00.000Z" } },
+    { memberH: MEMBER_H, event: { type: "PROMISE_MADE", promiseId: "p-1", memberH: MEMBER_H, due, text: "we will check the login bug", byManagerId: String(MANAGER_ID), seq: 2, ts: "2026-10-06T10:00:00.000Z" } },
   ];
   if (state === "fulfilled") entries.push({ memberH: MEMBER_H, event: { type: "PROMISE_FULFILLED", promiseId: "p-1", seq: 3, ts: "2026-10-07T10:00:00.000Z" } });
   return entries;
@@ -38,11 +38,11 @@ function field(entries: readonly LedgerEntry[], now: string, knowsMember = true)
   const memberMessages: string[] = [];
   const logLines: string[] = [];
   const directory = new MemberDirectory();
-  if (knowsMember) directory.remember({ userId: MEMBER_ID, memberH: MEMBER_H, userName: "ada" }, new Date(now));
+  if (knowsMember) directory.remember({ platform: "telegram", userId: String(MEMBER_ID), memberH: MEMBER_H, userName: "ada" }, new Date(now));
   const scheduler = new FollowUpScheduler({
     cache: cacheOf(entries),
     directory,
-    managerIds: [MANAGER_ID],
+    managerIds: [String(MANAGER_ID)],
     clock: { now: () => new Date(now) },
     log: new Log("followups", (line) => logLines.push(line)),
     toManager: async (_chatId, text) => {
@@ -122,12 +122,12 @@ describe("a promise that comes due is followed up", () => {
   it("keeps going when Telegram refuses one of the messages", async () => {
     const logLines: string[] = [];
     const directory = new MemberDirectory();
-    directory.remember({ userId: MEMBER_ID, memberH: MEMBER_H, userName: "ada" }, new Date("2026-10-08T09:00:00.000Z"));
+    directory.remember({ platform: "telegram", userId: String(MEMBER_ID), memberH: MEMBER_H, userName: "ada" }, new Date("2026-10-08T09:00:00.000Z"));
     const memberMessages: string[] = [];
     const scheduler = new FollowUpScheduler({
       cache: cacheOf(ledger("2026-10-08", true)),
       directory,
-      managerIds: [MANAGER_ID],
+      managerIds: [String(MANAGER_ID)],
       clock: { now: () => new Date("2026-10-08T09:00:00.000Z") },
       log: new Log("followups", (line) => logLines.push(line)),
       toManager: async () => {

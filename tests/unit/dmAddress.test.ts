@@ -19,7 +19,7 @@ const NAMESPACE = `sd-c1-m-${MEMBER_H}`;
 function afterRestart(scope: "storage" | "storage_and_dm", withAddress: boolean): LedgerCache {
   const entries: LedgerEntry[] = [
     { memberH: MEMBER_H, event: { type: "CONSENT_GIVEN", scope, seq: 1, ts: "2026-10-06T09:00:00.000Z" } },
-    { memberH: MEMBER_H, event: { type: "PROMISE_MADE", promiseId: "p-1", memberH: MEMBER_H, due: "2026-10-08", text: "we will check the login bug", byManagerId: MANAGER_ID, seq: 3, ts: "2026-10-06T10:00:00.000Z" } },
+    { memberH: MEMBER_H, event: { type: "PROMISE_MADE", promiseId: "p-1", memberH: MEMBER_H, due: "2026-10-08", text: "we will check the login bug", byManagerId: String(MANAGER_ID), seq: 3, ts: "2026-10-06T10:00:00.000Z" } },
   ];
   if (withAddress) entries.splice(1, 0, { memberH: MEMBER_H, event: { type: "DM_ADDRESS", telegramUserId: MEMBER, seq: 2, ts: "2026-10-06T09:00:01.000Z" } });
   const cache = new LedgerCache();
@@ -28,14 +28,14 @@ function afterRestart(scope: "storage" | "storage_and_dm", withAddress: boolean)
 }
 
 function schedulerOver(cache: LedgerCache, knowsSinceBoot: boolean) {
-  const memberMessages: Array<{ chatId: number; text: string }> = [];
+  const memberMessages: Array<{ chatId: string; text: string }> = [];
   const logLines: string[] = [];
   const directory = new MemberDirectory();
-  if (knowsSinceBoot) directory.remember({ userId: MEMBER, memberH: MEMBER_H, userName: "ada" }, new Date("2026-10-08T09:00:00.000Z"));
+  if (knowsSinceBoot) directory.remember({ platform: "telegram", userId: String(MEMBER), memberH: MEMBER_H, userName: "ada" }, new Date("2026-10-08T09:00:00.000Z"));
   const scheduler = new FollowUpScheduler({
     cache,
     directory,
-    managerIds: [MANAGER_ID],
+    managerIds: [String(MANAGER_ID)],
     clock: { now: () => new Date("2026-10-08T09:00:00.000Z") },
     log: new Log("followups", (line) => logLines.push(line)),
     toManager: async () => {},
@@ -51,7 +51,7 @@ describe("a DM address survives a restart", () => {
     const run = schedulerOver(afterRestart("storage_and_dm", true), false);
     await run.scheduler.tick();
     expect(run.memberMessages).toHaveLength(1);
-    expect(run.memberMessages[0]?.chatId).toBe(MEMBER);
+    expect(run.memberMessages[0]?.chatId).toBe(String(MEMBER));
     expect(run.memberMessages[0]?.text).toContain("still open");
   });
 

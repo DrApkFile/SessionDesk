@@ -21,13 +21,13 @@ describe("F13 consent guard", () => {
 
 describe("F14 manager allowlist", () => {
   it("accepts only an allowlisted telegram id", () => {
-    expect(requireManager([111, 222], 222)).toEqual({ ok: true, value: 222 });
+    expect(requireManager(["111", "222"], "222")).toEqual({ ok: true, value: "222" });
   });
 
   it("refuses everyone else with NOT_MANAGER and changes nothing", () => {
-    const refused = requireManager([111, 222], 333);
+    const refused = requireManager(["111", "222"], "333");
     expect(refused.ok).toBe(false);
     if (!refused.ok) expect(refused.code).toBe("NOT_MANAGER");
-    expect(requireManager([], 111).ok).toBe(false);
+    expect(requireManager([], "111").ok).toBe(false);
   });
 });

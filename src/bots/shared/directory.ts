@@ -1,8 +1,10 @@
 import { onlyMatch } from "../../core/onlyMatch.js";
 import type { Match } from "../../core/onlyMatch.js";
+import type { Platform } from "../../platform/platform.js";
 
 export interface KnownMember {
-  readonly userId: number;
+  readonly platform: Platform;
+  readonly userId: string;
   readonly memberH: string;
   readonly userName: string | null;
   seenAt: string;

@@ -17,12 +17,20 @@ export interface LastWrite {
   readonly code: string | null;
 }
 
+export interface PlatformHealth {
+  readonly platform: string;
+  readonly enabled: boolean;
+  readonly started: boolean;
+  readonly polling: boolean;
+}
+
 export interface HealthInputs {
   readonly bootOk: boolean;
   readonly bootComplete: boolean;
   readonly bootedAt: string | null;
   readonly bootSummary: string;
   readonly bots: readonly BotHealth[];
+  readonly platforms: readonly PlatformHealth[];
   readonly queue: WriteCounts & { readonly depth: number; readonly paused: boolean; readonly closed: boolean; readonly pauses: number };
   readonly lastWrite: LastWrite | null;
   readonly unclassifiedHeld: number;
@@ -37,7 +45,9 @@ export interface HealthResponse {
 }
 
 export function buildHealthResponse(inputs: HealthInputs): HealthResponse {
-  const allPolling = inputs.bots.length > 0 && inputs.bots.every((bot) => bot.polling);
+  const startedPlatforms = inputs.platforms.filter((platform) => platform.started);
+  const allPolling =
+    inputs.bots.length > 0 && inputs.bots.every((bot) => bot.polling) && startedPlatforms.length > 0 && startedPlatforms.every((platform) => platform.polling);
   const status = !inputs.bootOk ? "boot_failed" : allPolling && !inputs.queue.closed ? "ok" : "degraded";
   return {
     httpStatus: inputs.bootOk ? 200 : 503,
@@ -48,6 +58,7 @@ export function buildHealthResponse(inputs: HealthInputs): HealthResponse {
       bootedAt: inputs.bootedAt,
       bootSummary: inputs.bootSummary,
       uptimeSeconds: inputs.bootedAt === null ? 0 : Math.round((inputs.now.getTime() - new Date(inputs.bootedAt).getTime()) / 1000),
+      platforms: inputs.platforms,
       bots: inputs.bots.map((bot) => ({
         name: bot.name,
         polling: bot.polling,

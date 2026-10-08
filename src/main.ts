@@ -1,5 +1,4 @@
-import type { Bot } from "grammy";
-import { configSummary, loadConfig } from "./config.js";
+import { configSummary, enabledPlatforms, loadConfig } from "./config.js";
 import { BudgetGovernor } from "./core/budget.js";
 import { namespaceKindOf } from "./core/namespace.js";
 import { realSleep, systemClock } from "./core/ports.js";
@@ -15,19 +14,23 @@ import { GeminiModel } from "./models/gemini.js";
 import { GroqModel } from "./models/groq.js";
 import { ReplyChain } from "./models/replyChain.js";
 import { MemoryHealth } from "./bots/shared/health.js";
+import { randomBytes } from "node:crypto";
 import { randomIds } from "./bots/shared/ids.js";
+import { SETUP_CODE_CHARS, describeGovernance } from "./core/governance.js";
 import { Log } from "./bots/shared/log.js";
 import { PendingClassifications } from "./bots/shared/pending.js";
 import { EventPipeline } from "./bots/shared/pipeline.js";
 import { CommunityChat } from "./bots/shared/startup.js";
 import { MemberService } from "./bots/member/service.js";
-import { buildMemberBot } from "./bots/member/telegram.js";
 import { createNotesMemory } from "./bots/manager/notes.js";
 import { ManagerService } from "./bots/manager/service.js";
-import { buildManagerBot } from "./bots/manager/telegram.js";
 import { MemberDirectory } from "./bots/shared/directory.js";
 import { NamespaceRouter } from "./memory/router.js";
-import { PollingSupervisor, type Pollable } from "./bots/shared/polling.js";
+import { PLATFORMS, userKey } from "./platform/platform.js";
+import { plannedPlatforms, type PlatformRuntime } from "./platform/runtime.js";
+import { startTelegram } from "./platform/telegram/start.js";
+import { startDiscord } from "./platform/discord/start.js";
+import { startSlack } from "./platform/slack/start.js";
 import { FollowUpScheduler } from "./bots/shared/followUpScheduler.js";
 import type { LastWrite } from "./server/healthReport.js";
 import { startHealthServer } from "./server/httpServer.js";
@@ -102,7 +105,11 @@ const queue = new WriteQueue(
 
 const seq = new SeqAllocator(seqStart);
 const pipeline = new EventPipeline(seq, (namespace) => (namespace === notes.namespace ? notesCache : cache), queue, config.community.key);
-const chat = new CommunityChat(config.telegram.communityChatId);
+const telegramSettings = config.telegram;
+const chat = new CommunityChat(telegramSettings === null ? null : telegramSettings.communityChatId, () => {
+  const where = cache.state().governance.community;
+  return where === null ? null : { platform: where.platform, chatId: where.chatId };
+});
 const self = { username: "" };
 const gemini = new GeminiModel(config.gemini, realSleep, fetch);
 const groq = new GroqModel(config.groq, realSleep, fetch);
@@ -121,6 +128,22 @@ const pending = new PendingClassifications(
   log.child("pending"),
 );
 
+const setupCode = config.setupCode ?? randomBytes(6).toString("base64url").slice(0, SETUP_CODE_CHARS);
+if (config.setupCode === null) {
+  log.say("setup_code_generated", {
+    note: "printed once and never again: whoever runs this should DM the manager bot /claim <code> to become the owner",
+  });
+  console.log(`\n    SETUP CODE: ${setupCode}\n    Send this to the manager bot as: /claim ${setupCode}\n    It is not printed again, and never appears in /health, /status or evidence.\n`);
+} else {
+  log.say("setup_code", { source: "SETUP_CODE environment variable", printed: false });
+}
+
+const allManagerIds = [
+  ...(config.telegram?.managerIds ?? []).map((id) => userKey("telegram", id)),
+  ...(config.discord?.managerIds ?? []).map((id) => userKey("discord", id)),
+  ...(config.slack?.managerIds ?? []).map((id) => userKey("slack", id)),
+];
+
 const service = new MemberService({
   communityKey: config.community.key,
   namespaceSecret: config.community.namespaceSecret,
@@ -136,16 +159,16 @@ const service = new MemberService({
   ids: randomIds(),
   directory,
   memory,
-  managerIds: config.telegram.managerIds,
+  managerIds: allManagerIds,
   self,
+  directMessagesNeedOptIn: true,
 });
-
 member = service;
 
 const managerService = new ManagerService(
   {
     communityKey: config.community.key,
-    managerIds: config.telegram.managerIds,
+    managerIds: allManagerIds,
     cache,
     notesCache,
     pipeline,
@@ -155,6 +178,8 @@ const managerService = new ManagerService(
     log: log.child("manager"),
     ids: randomIds(),
     directory,
+    namespaceSecret: config.community.namespaceSecret,
+    setupCode,
     status: {
       snapshot: () => ({
         seqNext: seq.peek(),
@@ -167,7 +192,9 @@ const managerService = new ManagerService(
         communityPointsLeft: communityBudget.remaining(),
         notesPointsUsedThisHour: notes.budget.usedInWindow(),
         membersSeenSinceBoot: directory.size(),
+        governance: describeGovernance(cache.state().governance, allManagerIds),
         followUpChecks: followUps.ticks(),
+        platforms: runtimes.map((runtime) => `${runtime.platform}:${runtime.supervisors.every((supervisor) => supervisor.polling()) ? "polling" : "down"}`).join(" "),
         bootSummary: describeBoot(booted.value),
         notesBootSummary: describeBoot(bootedNotes.value),
       }),
@@ -176,54 +203,61 @@ const managerService = new ManagerService(
   config.community.namespaceSecret,
 );
 
-const memberBot = await buildMemberBot(config.telegram.memberBotToken, service, log.child("member"), chat, self);
-const managerBot = await buildManagerBot(config.telegram.managerBotToken, managerService, log.child("manager"));
-
-const group = await memberBot.bot.api.getChat(config.telegram.communityChatId).catch((error: unknown) => {
-  log.say("group_unreachable", {
-    configured: config.telegram.communityChatId,
-    detail: String(error instanceof Error ? error.message : error).slice(0, 200),
-    action: "add the member bot to the group, then check COMMUNITY_CHAT_ID",
-  });
-  return null;
-});
-if (group === null) process.exit(1);
-log.say("group", { configured: config.telegram.communityChatId, seen: group.id, type: group.type, title: ("title" in group ? group.title : null) ?? "—" });
-if (group.id !== config.telegram.communityChatId) {
-  log.say("group_mismatch", { configured: config.telegram.communityChatId, seen: group.id, action: `set COMMUNITY_CHAT_ID=${group.id} and restart` });
-  process.exit(1);
+const runtimes: PlatformRuntime[] = [];
+if (telegramSettings !== null) {
+  runtimes.push(
+    await startTelegram({
+      settings: telegramSettings,
+      member: service,
+      manager: managerService,
+      chat,
+      self,
+      log,
+      sleep: realSleep,
+      clock: systemClock,
+    }),
+  );
 }
-
-function pollable(name: string, bot: Bot): Pollable {
-  return {
-    name,
-    start: (onPolling) =>
-      bot.start({
-        onStart: (me) => {
-          log.say("polling", { bot: name, username: me.username });
-          onPolling();
-        },
-      }),
-    stop: () => bot.stop(),
-  };
+if (config.discord !== null) {
+  runtimes.push(
+    await startDiscord({
+      settings: config.discord,
+      member: service,
+      manager: managerService,
+      log: log.child("discord"),
+      sleep: realSleep,
+      clock: systemClock,
+    }),
+  );
 }
-
-const supervisors = [
-  new PollingSupervisor(pollable("member", memberBot.bot), realSleep, systemClock, log.child("member")),
-  new PollingSupervisor(pollable("manager", managerBot.bot), realSleep, systemClock, log.child("manager")),
-];
+if (config.slack !== null) {
+  runtimes.push(
+    await startSlack({
+      settings: config.slack,
+      member: service,
+      manager: managerService,
+      log: log.child("slack"),
+      sleep: realSleep,
+      clock: systemClock,
+    }),
+  );
+}
+for (const plan of plannedPlatforms(config.enabled, { telegram: config.telegram !== null, discord: config.discord !== null, slack: config.slack !== null })) {
+  if (!plan.willStart) log.say("platform_not_started", { platform: plan.platform, enabled: plan.enabled, configured: plan.configured });
+}
+log.say("platforms", { enabled: enabledPlatforms(config).join(",") || "none", started: runtimes.map((runtime) => runtime.platform).join(",") });
 
 const followUps = new FollowUpScheduler({
   cache,
   directory,
-  managerIds: config.telegram.managerIds,
+  managerIds: allManagerIds,
   clock: systemClock,
   log: log.child("followups"),
   toManager: async (chatId, text) => {
-    await managerBot.bot.api.sendMessage(chatId, text);
+    for (const runtime of runtimes) await runtime.toManager(chatId, text).catch(() => undefined);
   },
   toMember: async (chatId, text) => {
-    await memberBot.bot.api.sendMessage(chatId, text);
+    for (const runtime of runtimes) await runtime.toMember(chatId, text).catch(() => undefined);
   },
 });
 followUps.start();
@@ -235,12 +269,20 @@ const server = startHealthServer(
     bootComplete: booted.value.complete,
     bootedAt,
     bootSummary: describeBoot(booted.value),
-    bots: supervisors.map((supervisor, index) => ({
-      name: index === 0 ? "member" : "manager",
-      polling: supervisor.polling(),
-      state: supervisor.state(),
-      conflicts: supervisor.conflicts(),
-      pollingSince: supervisor.pollingSince(),
+    bots: runtimes.flatMap((runtime) =>
+      runtime.supervisors.map((supervisor) => ({
+        name: `${runtime.platform}:${supervisor.state() === "polling" ? "polling" : supervisor.state()}`,
+        polling: supervisor.polling(),
+        state: supervisor.state(),
+        conflicts: supervisor.conflicts(),
+        pollingSince: supervisor.pollingSince(),
+      })),
+    ),
+    platforms: PLATFORMS.map((platform) => ({
+      platform,
+      enabled: config.enabled[platform],
+      started: runtimes.some((runtime) => runtime.platform === platform),
+      polling: runtimes.some((runtime) => runtime.platform === platform && runtime.supervisors.every((supervisor) => supervisor.polling())),
     })),
     queue: { ...queue.counts(), depth: queue.depth(), paused: queue.paused(), closed: queue.closed(), pauses: queue.pauses() },
     lastWrite,
@@ -258,7 +300,8 @@ async function stop(signal: string): Promise<void> {
   stopping = true;
   log.say("stopping", { signal, queue: queue.depth(), unclassifiedHeld: pending.waiting() });
   followUps.stop();
-  await Promise.all(supervisors.map((supervisor) => supervisor.stop()));
+  await Promise.all(runtimes.flatMap((runtime) => runtime.supervisors.map((supervisor) => supervisor.stop())));
+  await Promise.all(runtimes.map((runtime) => runtime.stop()));
   queue.close();
   const drained = await queue.drain(SHUTDOWN_DRAIN_SECONDS * 1000);
   log.say("drained", {
@@ -279,5 +322,11 @@ process.once("SIGINT", () => void stop("SIGINT"));
 process.once("SIGTERM", () => void stop("SIGTERM"));
 
 log.say("reply_chain", { order: replies.names().join(" -> ") });
-log.say("ready", { bots: "member+manager", seqNext: seq.peek(), queue: queue.depth(), managers: config.telegram.managerIds.length, port: config.port });
-await Promise.all(supervisors.map((supervisor) => supervisor.run()));
+log.say("ready", {
+  platforms: runtimes.map((runtime) => runtime.platform).join(","),
+  seqNext: seq.peek(),
+  queue: queue.depth(),
+  managers: allManagerIds.length,
+  port: config.port,
+});
+await Promise.all(runtimes.flatMap((runtime) => runtime.supervisors.map((supervisor) => supervisor.run())));

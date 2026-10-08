@@ -15,8 +15,8 @@ export interface CommittableWrite {
 }
 
 export interface WriteOrigin {
-  readonly chatId: number;
-  readonly messageId: number;
+  readonly chatId: string;
+  readonly messageId: string;
 }
 
 export interface RecordedWrite {

@@ -1,5 +1,6 @@
-import { requireManager } from "../../core/consent.js";
+import { isManagerByEnv, isManagerByEvents } from "../../core/governance.js";
 import { memberHash } from "../../core/namespace.js";
+import { userKey } from "../../platform/platform.js";
 import { reviewReply } from "../../core/replyGuard.js";
 import { ERRORS } from "../../core/errors.js";
 import { managerPrompt } from "../../models/prompts.js";
@@ -7,6 +8,7 @@ import { commandOf, isCommand, reply, silent, type BotAction, type IncomingMessa
 import type { ManagerContext, ManagerDeps } from "./deps.js";
 import { MANAGER_HELP } from "./help.js";
 import { listAnswers, retire } from "./answerCommands.js";
+import { addManager, claim, removeManager, setupCommunity } from "./setupCommands.js";
 import { listNotes, writeNote } from "./noteCommands.js";
 import { donePromise, makePromise, owed } from "./promiseCommands.js";
 import { helpers, memberCard, status, themes, weeklyReport } from "./reportCommands.js";
@@ -23,23 +25,45 @@ export class ManagerService {
     this.#namespaceSecret = namespaceSecret;
   }
 
+  #actorHash(message: IncomingMessage): string {
+    return memberHash(this.#namespaceSecret, { platform: message.platform, id: message.userId });
+  }
+
+  #mayManage(message: IncomingMessage): boolean {
+    const governance = this.#deps.cache.state().governance;
+    if (isManagerByEnv(this.#deps.managerIds, userKey(message.platform, message.userId))) return true;
+    return isManagerByEvents(governance, this.#actorHash(message));
+  }
+
   async handle(message: IncomingMessage): Promise<BotAction> {
     if (message.isBot) return silent("sender is a bot");
-    const allowed = requireManager(this.#deps.managerIds, message.userId);
-    if (!allowed.ok) {
-      this.#deps.log.say("not_manager", { userId: message.userId, chatId: message.chatId });
+    const { name: commandName } = isCommand(message.text) ? commandOf(message.text) : { name: "" };
+    const claiming = commandName === "/claim";
+    if (!claiming && !this.#mayManage(message)) {
+      this.#deps.log.say("not_manager", { platform: message.platform, chat: message.chatKind, reason: "not on this platform's manager list" });
+      const governance = this.#deps.cache.state().governance;
+      if (governance.ownerH === null && this.#deps.managerIds.length === 0) {
+        return reply("Nobody has claimed this assistant yet. Whoever set it up has a setup code: send /claim with it to me in a direct message.");
+      }
       return reply(`${ERRORS.NOT_MANAGER.message} ${ERRORS.NOT_MANAGER.nextAction}`);
     }
 
     const context: ManagerContext = {
       message,
-      managerId: allowed.value,
-      replyToMemberH: message.replyToUserId === null || message.replyToIsBot ? null : memberHash(this.#namespaceSecret, message.replyToUserId),
+      managerId: message.userId,
+      replyToMemberH:
+        message.replyToUserId === null || message.replyToIsBot
+          ? null
+          : memberHash(this.#namespaceSecret, { platform: message.platform, id: message.replyToUserId }),
     };
 
     if (!isCommand(message.text)) return this.#answerFreeText(message);
 
     const { name, rest } = commandOf(message.text);
+    if (name === "/claim") return claim(this.#deps, context, rest);
+    if (name === "/addmanager") return addManager(this.#deps, context, rest);
+    if (name === "/removemanager") return removeManager(this.#deps, context, rest);
+    if (name === "/setup") return setupCommunity(this.#deps, context);
     if (isStatusCommand(name)) return changeStatus(this.#deps, context, name, rest);
     if (name === "/owed") return owed(this.#deps);
     if (name === "/themes") return themes(this.#deps);

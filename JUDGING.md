@@ -26,6 +26,8 @@ changes, across a restart**. Not "the bot remembers you said hello".
 | It is running and polling | `GET https://<service>/health` → 200, `status: ok`, both bots `polling: true` | live endpoint |
 | A member never sees an internal format | `npm test` walks every reply the member bot can send without a model and asserts no facts-sheet header, item id, tier label, status code, seq number or namespace appears | `tests/unit/plainLanguage.test.ts` |
 | A status is said in plain words | reported is "with the team", fixed is "fixed", and the reply guard maps those phrases back to statuses so a model cannot smuggle a wrong one through | `src/core/plainWords.ts` |
+| Another community can run this without editing code | `npm run setup` checks every value live and writes `.env`; or click Deploy to Render. Then `/claim`, `/setup`, `/optin`. No personal ids in settings | `tests/unit/selfSetup.test.ts`, `docs/ENV_VARS.md` |
+| Ownership cannot be taken | A second `OWNER_SET`, a manager change not signed by the owner, and a `COMMUNITY_SET` from a non-manager are all rejected by the resolver, not just by the command layer | `tests/unit/selfSetup.test.ts` |
 | A member can opt in without leaving the group | A manager runs `/optin`; the pinned notice has **I agree** and **I agree + DMs**. One tap records consent under that member's namespace hash, a second tap writes nothing | `tests/unit/groupOptin.test.ts` |
 | An earlier answer is reused instead of re-answered | Ask a question the group already answered: the reply names who answered, the date and a Walruscan receipt, and asks "did this help?" | `tests/unit/answerReuse.test.ts`, `/answers` |
 | A duplicate bug is linked, not opened twice | Report something already on record: the reply gives the existing item's current status and counts you as affected | `tests/unit/answerReuse.test.ts` |
@@ -81,6 +83,33 @@ Read this honestly:
 - Reproduce it: `MEASURE_SKIP_WRITES=1 MEASURE_RUN_ID=8fe64583 npx tsx --env-file=.env scripts/measure-stale.ts`
   reads the same mainnet lines back and recomputes both arms without writing anything.
 
+## Platforms
+
+Telegram is the platform this was demoed on and the only one with a live run behind it.
+
+| Platform | State |
+|---|---|
+| Telegram | **Live**, used by real members, every claim above measured on it |
+| Discord | **Built and unit-tested, not live-verified** |
+| Slack | **Built and unit-tested, not live-verified** |
+
+All logic sits behind one neutral port, so an adapter only translates a platform's message shape
+into `PlatformMessage` and an action back out. The shared behaviour suite
+(`tests/unit/crossPlatform.test.ts`) runs the same member expectations - consent under the right
+hash, nothing stored without consent, an item opened, thanks credited, plain-language `/mydata`,
+manager-only `/optin`, taps from other chats ignored - against all three platforms through fakes.
+
+Identity cannot cross platforms: a Telegram id hashes exactly as it always did, so no existing
+namespace moves (pinned by `tests/unit/identity.test.ts`), while Discord and Slack ids hash as
+`discord:<id>` and `slack:<id>`. A manager on one platform is not a manager on another.
+
+## Setting it up somewhere else
+
+Nothing in the settings names a person. `SETUP_CODE` is generated and printed once; whoever sends
+`/claim <code>` to the manager bot first becomes the owner. Governance events store the HMAC of a
+platform user key, never a raw id. `MANAGER_TELEGRAM_IDS` and `COMMUNITY_CHAT_ID` keep working, and
+when both env and events exist **env wins** — tested both ways.
+
 ## Honest limits
 
 - **Forgetting is partial.** Walrus storage is permanent. "Forget" means the namespace stops being
@@ -108,6 +137,14 @@ Read this honestly:
   `GEMINI_FALLBACK_MODEL`, then Qwen on Groq. Every answer must pass the reply guard and a leak
   check; one that fails falls through to the next model. Only when all three are gone does the
   member get the plain template, and it says so.
+- **The setup wizard has been run against the real APIs only by its author.** Its checks call
+  Telegram `getMe`, the Walrus relayer's `health` plus a signed recall per account, and one short
+  Gemini and Groq call. A Gemini 503 is reported as "overloaded, the key may be fine" rather than
+  as a bad key, because that is what S12 showed happening.
+- **Discord and Slack have never run live.** Their adapters are written against the installed
+  types (discord.js 14.23.2, @slack/bolt 4.4.0) and unit-tested, but no message has gone through
+  a real gateway or Socket Mode connection. Treat them as untested in production until a live run
+  is recorded here.
 - **Answer reuse needs exactly one clear match.** Two answers within the distance threshold means
   none is reused, by design. Thresholds are in `src/core/tuning.ts`.
 - **An answer recorded from a thanked member reply has no question text**, because Telegram does

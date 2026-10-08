@@ -215,7 +215,7 @@ describe("member commands", () => {
     await field.queue.settled();
     const saved = await field.service.handle(field.message({ chatId: MEMBER, chatType: "private", messageId: 4, text: "/mydata" }));
     expect(saved.kind === "reply" && saved.text).toContain("https://walruscan.com/mainnet/blob/");
-    expect(saved.kind === "reply" && saved.text).toContain("you raised a problem");
+    expect(saved.kind === "reply" && saved.text).toContain('You reported: "android login fails"');
     expect(saved.kind === "reply" && saved.text).toContain("Nobody can delete them");
   });
 

@@ -5,8 +5,8 @@ import type { Log } from "./log.js";
 export interface HeldMessage {
   readonly memberH: string;
   readonly text: string;
-  readonly chatId: number;
-  readonly messageId: number;
+  readonly chatId: string;
+  readonly messageId: string;
   readonly receivedAt: Date;
   readonly replyToMemberH: string | null;
   attempts: number;

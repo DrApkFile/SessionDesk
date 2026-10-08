@@ -1,5 +1,6 @@
 import { MemberService } from "../../src/bots/member/service.js";
 import type { IncomingMessage } from "../../src/bots/shared/incoming.js";
+import { userKey, type ChatKind, type Platform } from "../../src/platform/platform.js";
 import { MemberDirectory } from "../../src/bots/shared/directory.js";
 import { MemoryHealth } from "../../src/bots/shared/health.js";
 import { Log } from "../../src/bots/shared/log.js";
@@ -30,6 +31,45 @@ export interface HarnessOptions {
   readonly groqClassification?: string;
   readonly groqReplyText?: string;
   readonly memory?: FakeMemoryOptions;
+  readonly managerKeys?: readonly string[];
+  readonly platform?: Platform;
+  readonly communityChatId?: string | number | null;
+  readonly directMessagesNeedOptIn?: boolean;
+}
+
+export interface MessageDraft {
+  readonly platform?: Platform;
+  readonly chatId?: string | number;
+  readonly chatKind?: ChatKind;
+  readonly chatType?: "private" | "group" | "supergroup" | "channel";
+  readonly messageId?: string | number;
+  readonly userId?: string | number;
+  readonly isBot?: boolean;
+  readonly userName?: string | null;
+  readonly text?: string;
+  readonly mentionsBot?: boolean;
+  readonly replyToUserId?: string | number | null;
+  readonly replyToIsBot?: boolean;
+  readonly replyToText?: string | null;
+}
+
+export function draftToMessage(defaults: IncomingMessage, draft: MessageDraft): IncomingMessage {
+  const chatKind: ChatKind =
+    draft.chatKind ?? (draft.chatType === undefined ? defaults.chatKind : draft.chatType === "private" ? "direct" : draft.chatType === "channel" ? "other" : "community");
+  return {
+    platform: draft.platform ?? defaults.platform,
+    chatId: draft.chatId === undefined ? defaults.chatId : String(draft.chatId),
+    chatKind,
+    messageId: draft.messageId === undefined ? defaults.messageId : String(draft.messageId),
+    userId: draft.userId === undefined ? defaults.userId : String(draft.userId),
+    isBot: draft.isBot ?? defaults.isBot,
+    userName: draft.userName === undefined ? defaults.userName : draft.userName,
+    text: draft.text ?? defaults.text,
+    mentionsBot: draft.mentionsBot ?? defaults.mentionsBot,
+    replyToUserId: draft.replyToUserId === undefined ? defaults.replyToUserId : draft.replyToUserId === null ? null : String(draft.replyToUserId),
+    replyToIsBot: draft.replyToIsBot ?? defaults.replyToIsBot,
+    replyToText: draft.replyToText === undefined ? defaults.replyToText : draft.replyToText,
+  };
 }
 
 export interface Harness {
@@ -46,8 +86,8 @@ export interface Harness {
   readonly chat: CommunityChat;
   readonly logLines: string[];
   readonly clock: { now: () => Date };
-  message(partial: Partial<IncomingMessage>): IncomingMessage;
-  namespaceOfMember(userId: number): string;
+  message(partial: MessageDraft): IncomingMessage;
+  namespaceOfMember(userId: number | string): string;
   breakModel(status?: number): void;
   classifyAs(json: string): void;
   mendModel(): void;
@@ -109,7 +149,10 @@ export function harness(options: HarnessOptions = {}): Harness {
     { namespaces: 0, linesRead: 0, decoded: 0, undecodable: 0, dropped: 0, partialNamespaces: [], atLimitNamespaces: [], failures: [], maxSeq: 0, nextSeq: 1, complete: true },
     new Date("2026-10-08T09:00:00.000Z"),
   );
-  const chat = new CommunityChat(GROUP_CHAT_ID);
+  const chat = new CommunityChat(options.communityChatId === null ? null : (options.communityChatId ?? GROUP_CHAT_ID), () => {
+    const where = cache.state().governance.community;
+    return where === null ? null : { platform: where.platform, chatId: where.chatId };
+  });
   const directory = new MemberDirectory();
   const self = { username: "sdmemberbot" };
   const clock = { now: () => modelState.at };
@@ -143,8 +186,9 @@ export function harness(options: HarnessOptions = {}): Harness {
     chat,
     ids: countingIds(),
     directory,
+    directMessagesNeedOptIn: options.directMessagesNeedOptIn ?? true,
     memory,
-    managerIds: [MANAGER_ID],
+    managerIds: options.managerKeys ?? [userKey("telegram", String(MANAGER_ID))],
     self,
   });
 
@@ -164,7 +208,7 @@ export function harness(options: HarnessOptions = {}): Harness {
     chat,
     logLines,
     clock,
-    namespaceOfMember: (userId) => `sd-${COMMUNITY}-m-${service.memberHashOf(userId)}`,
+    namespaceOfMember: (userId) => `sd-${COMMUNITY}-m-${service.memberHashOf(userId, options.platform ?? "telegram")}`,
     breakModel: (status = 503) => {
       modelState.status = status;
     },
@@ -186,19 +230,23 @@ export function harness(options: HarnessOptions = {}): Harness {
     advanceMinutes: (minutes: number) => {
       modelState.at = new Date(modelState.at.getTime() + minutes * 60_000);
     },
-    message: (partial) => ({
-      chatId: GROUP_CHAT_ID,
-      chatType: "supergroup",
-      messageId: 1,
-      userId: 42_000_001,
-      isBot: false,
-      userName: "ada",
-      text: "hello",
-      mentionsBot: false,
-      replyToUserId: null,
-      replyToIsBot: false,
-      replyToText: null,
-      ...partial,
-    }),
+    message: (partial) =>
+      draftToMessage(
+        {
+          platform: options.platform ?? "telegram",
+          chatId: String(options.communityChatId ?? GROUP_CHAT_ID),
+          chatKind: "community",
+          messageId: "1",
+          userId: "42000001",
+          isBot: false,
+          userName: "ada",
+          text: "hello",
+          mentionsBot: false,
+          replyToUserId: null,
+          replyToIsBot: false,
+          replyToText: null,
+        },
+        partial,
+      ),
   };
 }

@@ -8,8 +8,8 @@ private notes. Built for Walrus Sessions 8, "Chatbots That Remember".
 Build steps 1-5 of 7 done (PRD §12), plus the P1 items that matter for a real community: config,
 the pure core, the Walrus memory layer, the member bot, the manager bot, deployment, the evidence
 script, JUDGING.md, /report and the follow-up scheduler. Deployed on Render.
-`npm run gate` is green: typecheck, no-comments check, .env-not-tracked check, and 444 unit and
-adversarial tests (no network), run 2026-10-07 on Node 24.19.0 / Linux.
+`npm run gate` is green: typecheck, no-comments check, .env-not-tracked check, and 551 unit and
+adversarial tests (no network), run 2026-10-08 on Node 24.19.0 / Linux.
 The restore test has been run once against Walrus mainnet: evidence/restore-test-5c2ff4cb.json
 (6 blobs written, 35.7 s per write, cache wiped and rebuilt, status still correct).
 
@@ -58,6 +58,33 @@ The restore test has been run once against Walrus mainnet: evidence/restore-test
 - A relayer 429 is treated as a budget problem: the queue pauses for exactly the backoff the
   relayer asked for and the write stays pending, never failed
 
+### Self-setup
+A new community needs no ids in its settings. `SETUP_CODE` is generated and printed once at
+startup; the first person to DM the manager bot `/claim <code>` becomes the owner, recorded as an
+`OWNER_SET` event in a config namespace on Walrus. The owner adds and removes managers with
+`/addmanager` and `/removemanager`, and a manager names the community with `/setup` in the group.
+Owner, managers and community are rebuilt from those events at boot, so they survive a restart.
+Governance events store the **HMAC of a person's platform user key**, never a raw id, so claiming
+ownership does not put anybody's account id on permanent public storage.
+
+`MANAGER_TELEGRAM_IDS` and `COMMUNITY_CHAT_ID` still work exactly as before, so an existing
+deployment runs unchanged. **If both are present, the environment wins**: env-listed managers can
+never be removed by an event, and `COMMUNITY_CHAT_ID` overrides whatever `/setup` recorded.
+
+### Platform support
+Telegram is the platform this was demoed and run on. The codebase runs every platform through one
+neutral port (`src/platform/platform.ts`): a message carries a platform, string ids, a chat kind,
+a mention flag and a reply-to, and an action is a reply with optional buttons and an optional pin.
+All member and manager logic sits behind that port, so an adapter only translates.
+
+**Discord and Slack are built and unit-tested, not live-verified.** Their message shapes, chat
+kinds, mention handling, button callbacks, scope and intent checks all have tests, and the shared
+behaviour suite runs the same member expectations against all three platforms through fakes. No
+live run against a real Discord guild or Slack workspace has happened yet, so nothing here claims
+one. Telegram's identity is pinned by a test so existing member namespaces cannot move; Discord
+and Slack ids are hashed as `discord:<id>` and `slack:<id>`, which cannot collide with a Telegram
+id or with each other.
+
 ### Not built yet
 - Namespace roll-over at 90 entries per namespace (designed, flagged in code, not built)
 - Nothing from the measured comparison is outstanding: it was pre-registered and run on mainnet
@@ -72,42 +99,137 @@ The restore test has been run once against Walrus mainnet: evidence/restore-test
 - The "reply path never awaits a write" test arrives with the write queue in step 2
 - No mainnet numbers are claimed here yet. Proven facts: briefing/REALITY_SPIKES.md
 
-## Setup from a clean clone
+## Set up SessionDesk for your community in 15 minutes
+
+You do not need to be a developer. You need a Telegram account, a web browser, and about fifteen
+minutes. Nothing here asks you to find your own user id or your group's id.
+
+### 1. Make two Telegram bots (4 minutes)
+In Telegram, message **@BotFather**.
+- Send `/newbot`, give it a name and a username ending in `bot`. Copy the long token it gives you.
+  This is your **member bot**, the one your community talks to.
+- Send `/setprivacy`, pick that bot, choose **Disable**. Without this it cannot read group messages.
+- Send `/newbot` again for a second bot. This is your **manager bot**, for you only.
+
+### 2. Make two Walrus Memory accounts (4 minutes)
+Go to **memory.walrus.xyz**, sign in, and create **two** accounts. For each one copy the account id
+(starts `0x`) and a delegate key. The second account exists so your private manager notes sit
+somewhere the member bot cannot read, which is a promise this project can actually keep.
+
+### 3. Get two model keys (3 minutes)
+- **aistudio.google.com/apikey** → Create API key. Free tier is fine.
+- **console.groq.com/keys** → Create API Key.
+
+### 4. Start it (2 minutes)
+
+**Either** on your own machine:
+```
+npm ci
+npm run setup
+```
+The wizard asks for each value in plain language, tells you where to find it, and **checks each one
+works as you paste it** — it will tell you if privacy mode is still on, if a Walrus key does not
+match its account, or if a model key is wrong, and what to do about it. It then writes `.env`,
+generates the two secrets for you, and prints your **setup code** once.
+
+**Or** deploy it with one click:
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy)
+
+Render reads `render.yaml`, asks you for the values above, and generates `NAMESPACE_SECRET` and
+`SETUP_CODE` itself. Every setting is explained in [docs/ENV_VARS.md](docs/ENV_VARS.md). Then open
+the service's **Logs** and look for the block that says `YOUR SETUP CODE`. It is printed **once**,
+never again, and never appears in `/health`, `/status` or any evidence file.
+
+### 5. Claim it and point it at your group (2 minutes)
+1. Message your **manager bot** and send `/claim <the setup code>`. You are now the owner. Nobody
+   else can claim it.
+2. Add your **member bot** to your group, and make it an admin so it can pin a message.
+3. In that group send `/setup`. The bot confirms which group it will serve.
+4. In that group send `/optin`. The bot posts a notice and pins it. Anyone who taps **I agree** is in.
+
+That is it. To let someone else run manager commands, reply to one of their messages with
+`/addmanager`. Use `/removemanager` to take it back. You cannot remove yourself.
+
+### If something goes wrong
+| What you see | What it means |
+|---|---|
+| The bot ignores everything in the group | Privacy mode is still on. @BotFather → `/setprivacy` → pick the member bot → Disable → remove and re-add it to the group. |
+| `/optin` posts but does not pin | The member bot is not an admin. Make it one; it still works, just unpinned. |
+| "Nobody has claimed this assistant yet" | Send `/claim <code>` to the **manager** bot in a direct message, not the member bot and not the group. |
+| "that setup code is wrong" | Check the log block again. If you lost it, delete `SETUP_CODE` from your settings and restart: a fresh one is printed once. |
+| "no community chat is set yet" | Send `/setup` in the group you want it to serve. |
+| Replies say "my AI is overloaded" | Gemini is busy. It retries, then tries a second Gemini model, then Groq, and only then gives you plain facts. Nothing is lost. |
+| `/mydata` shows "still saving" | A Walrus write takes 30 to 38 seconds. Check again in a minute and it will show a receipt link. |
+| It stops answering after a while on Render's free plan | Free services sleep when idle. Point a pinger at `/health` every 5 to 10 minutes (see Deploy below). |
+
+## Setup by hand (if you would rather not use the wizard)
+
 1. **Node 22 or newer.** `npm ci`
-2. **Two Telegram bots** from @BotFather: one member bot, one manager bot. For the member bot run
-   `/setprivacy` and choose **Disable**, or it cannot see group messages and this app refuses to
-   start. Add the member bot to your group.
-3. **Make the member bot an admin of the group** if you want `/optin` to pin its notice. Without
-   pin rights it still posts the notice and logs `optin_pin_failed`.
-4. **Two Walrus Memory accounts** (account A for community memory, account B for manager notes
+2. **Two Walrus Memory accounts** (account A for community memory, account B for manager notes
    only). You need each account's object id and its delegate key.
-5. **Model keys:** a Gemini API key and a Groq API key.
-6. **Your own ids:** your numeric Telegram id from @userinfobot for `MANAGER_TELEGRAM_IDS`, and the
-   group's chat id. The member bot logs the chat id it sees at startup, and refuses to run if it
-   does not match `COMMUNITY_CHAT_ID`.
-7. `cp .env.example .env` and fill every value. `NAMESPACE_SECRET` must be a long random string:
-   `openssl rand -hex 32`. **Never change it after members join** - it is the key that maps a
-   Telegram id to a namespace, so changing it orphans every memory already written.
-8. `npm run gate` - typecheck, no-comments check, .env-not-tracked check, and the full unit and
+3. **Model keys:** a Gemini API key and a Groq API key.
+4. `cp .env.example .env` and fill the shared values. `NAMESPACE_SECRET` must be a long random
+   string: `openssl rand -hex 32`. **Never change it after members join** - it is the key that
+   maps a platform user id to a namespace, so changing it orphans every memory already written.
+5. Either run `npm run setup`, or fill `.env` yourself. Turn on at least one platform below. `TELEGRAM_ENABLED` defaults to `true`;
+   `DISCORD_ENABLED` and `SLACK_ENABLED` default to `false`. A platform's settings are only
+   required when it is enabled, and a platform that is off is never constructed.
+6. `npm run gate` - typecheck, no-comments check, .env-not-tracked check, and the full unit and
    adversarial suite. No network, no keys needed.
-9. `npm run dev` starts both bots and the health server on port 3000.
+7. `npm run dev` starts every enabled platform and the health server on port 3000.
+
+One process serves every platform, with **one** sequence allocator and **one** write queue shared
+across them. Do not run two instances against the same tokens.
+
+### Telegram (the platform this was demoed on)
+1. Two bots from @BotFather: one member bot, one manager bot.
+2. For the member bot run `/setprivacy` and choose **Disable**, or it cannot read group messages
+   and this app refuses to start.
+3. Add the member bot to your group, and make it an admin if you want `/optin` to pin its notice.
+4. Get your numeric id from @userinfobot for `MANAGER_TELEGRAM_IDS`, and the group's chat id. The
+   bot logs the chat id it sees at startup and refuses to run if it does not match
+   `COMMUNITY_CHAT_ID`.
+
+### Discord
+1. Create an application at <https://discord.com/developers/applications>, open **Bot**, and copy
+   the token into `DISCORD_BOT_TOKEN`.
+2. Under **Privileged Gateway Intents**, turn on **Message Content Intent**. Without it the bot
+   cannot read what members write, and the adapter refuses to start with that exact instruction.
+3. Invite the bot with the `bot` scope and the permissions: View Channels, Send Messages,
+   Read Message History, and Manage Messages (only needed to pin the opt-in notice).
+4. Put the channel it should serve in `DISCORD_CHANNEL_ID` (right-click the channel, Copy
+   Channel ID, with Developer Mode on) and your own user id in `DISCORD_MANAGER_IDS`.
+
+### Slack
+1. Create an app at <https://api.slack.com/apps> from scratch.
+2. **OAuth & Permissions** → Bot Token Scopes: `app_mentions:read`, `channels:history`,
+   `chat:write`, `im:history`, `im:write`, `pins:write`, `users:read`. Install to the workspace
+   and copy the `xoxb-` token into `SLACK_BOT_TOKEN`.
+3. **Socket Mode** → enable it, generate an app-level token with `connections:write`, and copy the
+   `xapp-` token into `SLACK_APP_TOKEN`. Socket Mode means **no public URL is needed**.
+4. **Event Subscriptions** → subscribe to `message.channels`, `message.im` and `app_mention`.
+5. Invite the bot to the channel, put that channel id in `SLACK_CHANNEL_ID` and your own member
+   id in `SLACK_MANAGER_IDS`.
 
 ### What you should see
 ```
-sessiondesk config accountA=0x… communityKey=c1 communityChatId=-100… port=3000
+sessiondesk config accountA=0x… communityKey=c1 platforms=telegram … port=3000
 sessiondesk boot_done summary=namespaces=N lines=N decoded=N … maxSeq=N nextSeq=N complete=true
 sessiondesk notes_boot_done … account=B namespace=sd-<key>-notes
 sessiondesk.member identity username=… canReadAllGroupMessages=true
 sessiondesk group configured=-100… seen=-100… type=supergroup title=…
-sessiondesk ready bots=member+manager seqNext=N queue=0 managers=1
-sessiondesk polling bot=manager …
+sessiondesk platform_not_started platform=discord enabled=false configured=false
+sessiondesk platforms enabled=telegram started=telegram
+sessiondesk ready platforms=telegram seqNext=N queue=0 managers=1 port=3000
 sessiondesk polling bot=member …
 ```
-If `canReadAllGroupMessages` is false, privacy mode is still on. If `group` does not appear, the
-bot is not in the group or `COMMUNITY_CHAT_ID` is wrong; both refuse to start rather than run half
-working.
+If `canReadAllGroupMessages` is false, Telegram privacy mode is still on. If `group` does not
+appear, the bot is not in the group or `COMMUNITY_CHAT_ID` is wrong; both refuse to start rather
+than run half working.
 
 ### Other commands
+- `npm run setup` the guided wizard: asks for each value, checks it live, writes `.env`.
 - `npm run evidence` per-member memory counts, blob ids with Walruscan links, and the agent id
   into `evidence/`. Reads mainnet, costs a few points.
 - `npm run test:live` the restore test: writes to mainnet, wipes the cache, rebuilds, compares.

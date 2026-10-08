@@ -14,6 +14,8 @@ import { replyPrompt } from "../../models/prompts.js";
 import { memberCommands } from "./commands.js";
 import type { MemberDeps } from "./deps.js";
 import { consentKey, dmAddressKey } from "../../core/idempotency.js";
+import { dmAddressDraft } from "../../core/dmAddress.js";
+import { userKey, type ChatKind, type Platform } from "../../platform/platform.js";
 import type { HeldMessage, RetryOutcome } from "../shared/pending.js";
 import { chatLabel, commandOf, isCommand, isPrivate, reply, silent, type IncomingMessage, type MemberAction } from "../shared/incoming.js";
 import {
@@ -34,10 +36,11 @@ import {
 } from "./notices.js";
 
 export interface ConsentTap {
-  readonly userId: number;
-  readonly chatId: number;
-  readonly chatType: "private" | "group" | "supergroup" | "channel";
-  readonly messageId: number;
+  readonly platform?: Platform;
+  readonly userId: string | number;
+  readonly chatId: string | number;
+  readonly chatKind: ChatKind;
+  readonly messageId: string | number;
   readonly scope: ConsentScope;
 }
 
@@ -55,8 +58,8 @@ export class MemberService {
     this.#deps = deps;
   }
 
-  memberHashOf(userId: number): string {
-    return memberHash(this.#deps.namespaceSecret, userId);
+  memberHashOf(userId: string | number, platform: Platform = "telegram"): string {
+    return memberHash(this.#deps.namespaceSecret, { platform, id: String(userId) });
   }
 
   namespacesFor(memberH: string): readonly string[] {
@@ -69,7 +72,7 @@ export class MemberService {
 
   async handle(message: IncomingMessage): Promise<MemberAction> {
     if (message.isBot) return silent("sender is a bot");
-    if (message.chatType === "channel") return silent("channel post");
+    if (message.chatKind === "other") return silent("not a chat the bot serves");
     if (!isPrivate(message)) {
       const known = this.#deps.chat.check(message.chatId);
       if (!known.ok) {
@@ -78,8 +81,8 @@ export class MemberService {
       }
     }
 
-    const memberH = this.memberHashOf(message.userId);
-    this.#deps.directory.remember({ userId: message.userId, memberH, userName: message.userName }, this.#deps.clock.now());
+    const memberH = this.memberHashOf(message.userId, message.platform);
+    this.#deps.directory.remember({ platform: message.platform, userId: message.userId, memberH, userName: message.userName }, this.#deps.clock.now());
     this.#rememberDmAddress(message, memberH);
     const problem = this.#deps.health.problemFor(this.namespacesFor(memberH));
     if (problem === "MEMORY_UNAVAILABLE") {
@@ -97,11 +100,11 @@ export class MemberService {
     return this.#handleTalk(message, memberH, problem === "MEMORY_PARTIAL");
   }
 
-  recordConsent(userId: number, chatId: number, messageId: number, scope: ConsentScope): MemberAction {
-    const memberH = this.memberHashOf(userId);
+  recordConsent(userId: string | number, chatId: string | number, messageId: string | number, scope: ConsentScope, platform: Platform = "telegram"): MemberAction {
+    const memberH = this.memberHashOf(userId, platform);
     if (this.#deps.cache.state().members.get(memberH)?.consented === true) return reply(ALREADY_CONSENTED);
-    this.#writeConsent(memberH, scope, chatId, messageId);
-    if (scope === "storage_and_dm") this.#writeDmAddress(memberH, userId, chatId, messageId);
+    this.#writeConsent(memberH, scope, String(chatId), String(messageId));
+    if (scope === "storage_and_dm") this.#writeDmAddress(memberH, String(userId), String(chatId), String(messageId), platform);
     return reply(scope === "storage_and_dm" ? DM_CONSENT_RECORDED : CONSENT_RECORDED);
   }
 
@@ -109,7 +112,7 @@ export class MemberService {
     const member = this.#deps.cache.state().members.get(memberH);
     if (member === undefined || !member.consented || !member.dmConsent || member.dmUserId !== null) return;
     this.#deps.pipeline.commit(
-      [{ draft: { type: "DM_ADDRESS", telegramUserId: message.userId }, namespaces: [{ kind: "member", memberH }] }],
+      [{ draft: dmAddressDraft(message.platform, message.userId), namespaces: [{ kind: "member", memberH }], idempotency: dmAddressKey(this.#deps.communityKey, memberH) }],
       { chatId: message.chatId, messageId: message.messageId },
       this.#deps.clock.now(),
     );
@@ -120,8 +123,8 @@ export class MemberService {
     const question = message.replyToText;
     if (question === null || message.replyToUserId === null || message.replyToIsBot) return [];
     if (!question.includes("?")) return [];
-    if (!this.#deps.managerIds.includes(message.userId)) return [];
-    if (this.#deps.managerIds.includes(message.replyToUserId)) return [];
+    if (!this.#deps.managerIds.includes(userKey(message.platform, message.userId))) return [];
+    if (this.#deps.managerIds.includes(userKey(message.platform, message.replyToUserId))) return [];
     if (!guardStoredText(question).ok || !guardStoredText(message.text).ok) {
       this.#deps.log.say("answer_secret_blocked", { chat: chatLabel(message) });
       return [];
@@ -173,16 +176,16 @@ export class MemberService {
     const member = this.#deps.cache.state().members.get(memberH);
     if (member === undefined || !member.consented) {
       this.#writeConsent(memberH, "storage_and_dm", message.chatId, message.messageId);
-      this.#writeDmAddress(memberH, message.userId, message.chatId, message.messageId);
+      this.#writeDmAddress(memberH, message.userId, message.chatId, message.messageId, message.platform);
       return reply(DM_CONSENT_RECORDED);
     }
     if (member.dmConsent && member.dmUserId !== null) return reply(ALREADY_CONSENTED);
     this.#writeConsent(memberH, "storage_and_dm", message.chatId, message.messageId);
-    this.#writeDmAddress(memberH, message.userId, message.chatId, message.messageId);
+    this.#writeDmAddress(memberH, message.userId, message.chatId, message.messageId, message.platform);
     return reply(DM_CONSENT_RECORDED);
   }
 
-  #writeConsent(memberH: string, scope: ConsentScope, chatId: number, messageId: number): number {
+  #writeConsent(memberH: string, scope: ConsentScope, chatId: string, messageId: string): number {
     const recorded = this.#deps.pipeline.commit(
       [
         {
@@ -199,11 +202,11 @@ export class MemberService {
     return seq;
   }
 
-  #writeDmAddress(memberH: string, userId: number, chatId: number, messageId: number): void {
+  #writeDmAddress(memberH: string, userId: string, chatId: string, messageId: string, platform: Platform = "telegram"): void {
     this.#deps.pipeline.commit(
       [
         {
-          draft: { type: "DM_ADDRESS", telegramUserId: userId },
+          draft: dmAddressDraft(platform, userId),
           namespaces: [{ kind: "member", memberH }],
           idempotency: dmAddressKey(this.#deps.communityKey, memberH),
         },
@@ -215,29 +218,30 @@ export class MemberService {
   }
 
   consentFromTap(tap: ConsentTap): TapOutcome {
-    const inCommunity = tap.chatType === "private" || this.#deps.chat.check(tap.chatId).ok;
+    const platform = tap.platform ?? "telegram";
+    const inCommunity = tap.chatKind === "direct" || this.#deps.chat.check(String(tap.chatId)).ok;
     if (!inCommunity) {
       this.#deps.log.say("tap_ignored", { chat: String(tap.chatId), reason: "not the community chat" });
       return { ignored: true, wrote: false, alert: "" };
     }
-    const memberH = this.memberHashOf(tap.userId);
+    const memberH = this.memberHashOf(String(tap.userId), platform);
     const member = this.#deps.cache.state().members.get(memberH);
     const wantsDm = tap.scope === "storage_and_dm";
-    const canDmNow = tap.chatType === "private";
+    const canDmNow = tap.chatKind === "direct" || !this.#deps.directMessagesNeedOptIn;
 
     if (member?.consented === true) {
       if (wantsDm && canDmNow && (!member.dmConsent || member.dmUserId === null)) {
-        this.#writeConsent(memberH, "storage_and_dm", tap.chatId, tap.messageId);
-        this.#writeDmAddress(memberH, tap.userId, tap.chatId, tap.messageId);
+        this.#writeConsent(memberH, "storage_and_dm", String(tap.chatId), String(tap.messageId));
+        this.#writeDmAddress(memberH, String(tap.userId), String(tap.chatId), String(tap.messageId), platform);
         return { ignored: false, wrote: true, alert: tapWelcome(this.#deps.self.username) };
       }
-      this.#deps.log.say("tap_duplicate", { memberH, chat: tap.chatType === "private" ? "dm" : String(tap.chatId) });
+      this.#deps.log.say("tap_duplicate", { memberH, chat: tap.chatKind === "direct" ? "dm" : String(tap.chatId) });
       return { ignored: false, wrote: false, alert: wantsDm && !canDmNow ? tapNeedsDmStart(this.#deps.self.username) : TAP_ALREADY };
     }
 
     const scope: ConsentScope = wantsDm && canDmNow ? "storage_and_dm" : "storage";
-    this.#writeConsent(memberH, scope, tap.chatId, tap.messageId);
-    if (scope === "storage_and_dm") this.#writeDmAddress(memberH, tap.userId, tap.chatId, tap.messageId);
+    this.#writeConsent(memberH, scope, String(tap.chatId), String(tap.messageId));
+    if (scope === "storage_and_dm") this.#writeDmAddress(memberH, String(tap.userId), String(tap.chatId), String(tap.messageId), platform);
     const alert = wantsDm && !canDmNow ? tapNeedsDmStart(this.#deps.self.username) : tapWelcome(this.#deps.self.username);
     return { ignored: false, wrote: true, alert };
   }
@@ -391,7 +395,7 @@ export class MemberService {
 
   #helperFor(message: IncomingMessage): string | null {
     if (message.replyToUserId === null || message.replyToIsBot) return null;
-    const helperH = this.memberHashOf(message.replyToUserId);
+    const helperH = this.memberHashOf(message.replyToUserId, message.platform);
     return this.#deps.cache.state().members.get(helperH)?.consented === true ? helperH : null;
   }
 

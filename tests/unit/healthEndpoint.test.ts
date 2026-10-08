@@ -16,6 +16,11 @@ function inputs(overrides: Partial<HealthInputs> = {}): HealthInputs {
       { name: "member", polling: true, state: "polling", conflicts: 0, pollingSince: bootedAt },
       { name: "manager", polling: true, state: "polling", conflicts: 0, pollingSince: bootedAt },
     ],
+    platforms: [
+      { platform: "telegram", enabled: true, started: true, polling: true },
+      { platform: "discord", enabled: false, started: false, polling: false },
+      { platform: "slack", enabled: false, started: false, polling: false },
+    ],
     queue: { depth: 0, pending: 0, saved: 7, failed: 0, paused: false, closed: false, pauses: 0 },
     lastWrite: { at: bootedAt, state: "saved", namespaceKind: "member", code: null },
     unclassifiedHeld: 0,
@@ -46,6 +51,30 @@ describe("GET /health", () => {
     const response = buildHealthResponse(inputs({ queue: { depth: 3, pending: 4, saved: 11, failed: 1, paused: true, closed: false, pauses: 2 } }));
     expect(response.body.queue).toEqual({ depth: 3, pending: 4, saved: 11, failed: 1, paused: true, rateLimitPauses: 2, acceptingWrites: true });
     expect(response.body.lastWrite).toEqual({ at: bootedAt, state: "saved", namespaceKind: "member", code: null });
+  });
+
+  it("reports every platform, whether it is on and whether it is polling", () => {
+    const response = buildHealthResponse(inputs());
+    expect(response.body.platforms).toEqual([
+      { platform: "telegram", enabled: true, started: true, polling: true },
+      { platform: "discord", enabled: false, started: false, polling: false },
+      { platform: "slack", enabled: false, started: false, polling: false },
+    ]);
+    expect(response.body.status).toBe("ok");
+  });
+
+  it("says degraded when an enabled platform started but is not polling", () => {
+    const response = buildHealthResponse(
+      inputs({
+        platforms: [
+          { platform: "telegram", enabled: true, started: true, polling: true },
+          { platform: "discord", enabled: true, started: true, polling: false },
+          { platform: "slack", enabled: false, started: false, polling: false },
+        ],
+      }),
+    );
+    expect(response.body.status).toBe("degraded");
+    expect(response.httpStatus).toBe(200);
   });
 
   it("returns 503 when the boot rebuild failed", () => {

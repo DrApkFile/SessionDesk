@@ -10,12 +10,14 @@ import {
   type EventType,
 } from "./vocabulary.js";
 import { MAX_STORED_TEXT_CHARS, MAX_THEME_LABEL_CHARS } from "./tuning.js";
+import { PLATFORMS } from "../platform/platform.js";
 
 const identifier = z.string().min(1).max(64).regex(/^[A-Za-z0-9_-]+$/);
 const memberHash = z.string().regex(/^[0-9a-f]{24}$/);
 const storedText = z.string().min(1).max(MAX_STORED_TEXT_CHARS);
 const calendarDay = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const wholeNumber = z.coerce.number().int();
+const actorId = z.string().min(1).max(64).regex(/^[A-Za-z0-9_:-]+$/);
 
 export const EVENT_PAYLOADS = {
   CONSENT_GIVEN: z.object({ scope: z.enum(["storage", "storage_and_dm"]) }).strict(),
@@ -30,7 +32,7 @@ export const EVENT_PAYLOADS = {
       itemId: identifier.optional(),
       due: calendarDay,
       text: storedText,
-      byManagerId: wholeNumber.positive(),
+      byManagerId: actorId,
     })
     .strict(),
   PROMISE_FULFILLED: z.object({ promiseId: identifier }).strict(),
@@ -38,8 +40,8 @@ export const EVENT_PAYLOADS = {
   CORRECTION: z.object({ targetSeq: wholeNumber.nonnegative(), field: identifier, value: storedText }).strict(),
   THEME_CREATED: z.object({ themeId: identifier, label: z.string().min(1).max(MAX_THEME_LABEL_CHARS) }).strict(),
   MANAGER_NOTE: z.object({ memberH: memberHash.optional(), text: storedText }).strict(),
-  TIER_SET: z.object({ memberH: memberHash, tier: z.enum(GRANTABLE_TIERS), byManagerId: wholeNumber.positive() }).strict(),
-  TIER_REVOKED: z.object({ memberH: memberHash, byManagerId: wholeNumber.positive() }).strict(),
+  TIER_SET: z.object({ memberH: memberHash, tier: z.enum(GRANTABLE_TIERS), byManagerId: actorId }).strict(),
+  TIER_REVOKED: z.object({ memberH: memberHash, byManagerId: actorId }).strict(),
   ANSWER: z
     .object({
       answerId: identifier,
@@ -49,10 +51,15 @@ export const EVENT_PAYLOADS = {
       themeId: identifier,
     })
     .strict(),
-  ANSWER_RETIRED: z.object({ answerId: identifier, byManagerId: wholeNumber.positive() }).strict(),
+  ANSWER_RETIRED: z.object({ answerId: identifier, byManagerId: actorId }).strict(),
   ITEM_AFFECTS: z.object({ itemId: identifier, memberH: memberHash }).strict(),
   DM_ADDRESS: z.object({ telegramUserId: wholeNumber.positive() }).strict(),
   ANSWER_FEEDBACK: z.object({ answerId: identifier, helpful: z.enum(["true", "false"]).transform((raw) => raw === "true") }).strict(),
+  DM_HANDLE: z.object({ platform: z.enum(PLATFORMS), address: z.string().min(1).max(64) }).strict(),
+  OWNER_SET: z.object({ ownerH: memberHash }).strict(),
+  MANAGER_ADDED: z.object({ managerH: memberHash, byOwnerH: memberHash }).strict(),
+  MANAGER_REMOVED: z.object({ managerH: memberHash, byOwnerH: memberHash }).strict(),
+  COMMUNITY_SET: z.object({ platform: z.enum(PLATFORMS), chatId: z.string().min(1).max(64), bySetterH: memberHash }).strict(),
 } satisfies Record<EventType, z.ZodObject>;
 
 export type PayloadOf<K extends EventType> = z.infer<(typeof EVENT_PAYLOADS)[K]>;

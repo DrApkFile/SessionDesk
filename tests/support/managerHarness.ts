@@ -4,7 +4,9 @@ import { MemoryHealth } from "../../src/bots/shared/health.js";
 import { Log } from "../../src/bots/shared/log.js";
 import { EventPipeline } from "../../src/bots/shared/pipeline.js";
 import type { IncomingMessage } from "../../src/bots/shared/incoming.js";
+import { draftToMessage, type MessageDraft } from "./memberHarness.js";
 import { memberHash, resolveNamespace } from "../../src/core/namespace.js";
+import { userKey } from "../../src/platform/platform.js";
 import { countingIds } from "../../src/core/ports.js";
 import { SeqAllocator } from "../../src/core/seq.js";
 import { LedgerCache } from "../../src/memory/cache.js";
@@ -21,9 +23,13 @@ export const COMMUNITY = "c1";
 export const SECRET_SEED = "f".repeat(64);
 export const NOTES_NAMESPACE = resolveNamespace(COMMUNITY, { kind: "notes" });
 
+export const SETUP_CODE = "abc123xyz9";
+
 export interface ManagerHarnessOptions {
   readonly answer?: string;
   readonly modelStatus?: number;
+  readonly setupCode?: string | null;
+  readonly managerKeys?: readonly string[];
 }
 
 export interface ManagerHarness {
@@ -38,8 +44,8 @@ export interface ManagerHarness {
   readonly clock: { now: () => Date };
   readonly pipeline: EventPipeline;
   memberHashOf(userId: number): string;
-  message(partial: Partial<IncomingMessage>): IncomingMessage;
-  ask(text: string, partial?: Partial<IncomingMessage>): Promise<string>;
+  message(partial: MessageDraft): IncomingMessage;
+  ask(text: string, partial?: MessageDraft): Promise<string>;
 }
 
 function groqFetch(options: ManagerHarnessOptions): FetchLike {
@@ -75,7 +81,7 @@ export function managerHarness(options: ManagerHarnessOptions = {}): ManagerHarn
   const service = new ManagerService(
     {
       communityKey: COMMUNITY,
-      managerIds: [MANAGER_ID],
+      managerIds: options.managerKeys ?? [userKey("telegram", String(MANAGER_ID))],
       cache,
       notesCache,
       pipeline,
@@ -86,24 +92,30 @@ export function managerHarness(options: ManagerHarnessOptions = {}): ManagerHarn
       ids: countingIds(),
       directory,
       status: { snapshot: () => ({ seqNext: 7, queueDepth: queue.depth(), unclassifiedHeld: 0 }) },
+      namespaceSecret: SECRET_SEED,
+      setupCode: options.setupCode === undefined ? SETUP_CODE : options.setupCode,
     },
     SECRET_SEED,
   );
 
-  const message = (partial: Partial<IncomingMessage>): IncomingMessage => ({
-    chatId: MANAGER_CHAT,
-    chatType: "private",
-    messageId: 1,
-    userId: MANAGER_ID,
-    isBot: false,
-    userName: "boss",
-    text: "/owed",
-    mentionsBot: true,
-    replyToUserId: null,
-    replyToIsBot: false,
-    replyToText: null,
-    ...partial,
-  });
+  const message = (partial: MessageDraft): IncomingMessage =>
+    draftToMessage(
+      {
+        platform: "telegram",
+        chatId: String(MANAGER_CHAT),
+        chatKind: "direct",
+        messageId: "1",
+        userId: String(MANAGER_ID),
+        isBot: false,
+        userName: "boss",
+        text: "/owed",
+        mentionsBot: true,
+        replyToUserId: null,
+        replyToIsBot: false,
+        replyToText: null,
+      },
+      partial,
+    );
 
   return {
     service,
@@ -116,7 +128,7 @@ export function managerHarness(options: ManagerHarnessOptions = {}): ManagerHarn
     logLines,
     clock,
     pipeline,
-    memberHashOf: (userId) => memberHash(SECRET_SEED, userId),
+    memberHashOf: (userId) => memberHash(SECRET_SEED, { platform: "telegram", id: String(userId) }),
     message,
     ask: async (text, partial = {}) => {
       const action = await service.handle(message({ text, ...partial }));

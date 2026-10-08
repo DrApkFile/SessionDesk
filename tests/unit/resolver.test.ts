@@ -86,10 +86,10 @@ describe("F12 resolver folds by seq", () => {
   });
 
   it("refuses a second grant and a revoke with no grant, and records both", () => {
-    const doubled = resolve([...ambassadorLedger, { memberH: MEMBER_A, event: { type: "TIER_SET", memberH: MEMBER_A, tier: "ambassador", byManagerId: 4242, seq: 15, ts: "2026-10-07T12:00:00.000Z" } }]);
+    const doubled = resolve([...ambassadorLedger, { memberH: MEMBER_A, event: { type: "TIER_SET", memberH: MEMBER_A, tier: "ambassador", byManagerId: "4242", seq: 15, ts: "2026-10-07T12:00:00.000Z" } }]);
     expect(doubled.rejectedEvents).toBe(1);
     expect(doubled.members.get(MEMBER_A)?.tier).toBe("ambassador");
-    const emptyRevoke = resolve([...revokedLedger, { memberH: MEMBER_A, event: { type: "TIER_REVOKED", memberH: MEMBER_A, byManagerId: 4242, seq: 16, ts: "2026-10-07T13:00:00.000Z" } }]);
+    const emptyRevoke = resolve([...revokedLedger, { memberH: MEMBER_A, event: { type: "TIER_REVOKED", memberH: MEMBER_A, byManagerId: "4242", seq: 16, ts: "2026-10-07T13:00:00.000Z" } }]);
     expect(emptyRevoke.rejectedEvents).toBe(1);
     expect(emptyRevoke.members.get(MEMBER_A)?.tier).toBe("regular");
   });
