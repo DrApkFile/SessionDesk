@@ -42,9 +42,9 @@ export const SHUTDOWN_DRAIN_SECONDS = 25;
 export const DRAIN_POLL_MS = 500;
 export const DEFAULT_PORT = 3000;
 
-export const ANSWER_MAX_DISTANCE = 0.32;
+export const ANSWER_MAX_DISTANCE = 0.72;
 export const ANSWER_SEARCH_LIMIT = 5;
-export const KNOWN_ISSUE_MAX_DISTANCE = 0.3;
+export const KNOWN_ISSUE_MAX_DISTANCE = 0.6;
 export const KNOWN_ISSUE_SEARCH_LIMIT = 5;
 export const PLAIN_RECALL_TOP_K = 5;
 

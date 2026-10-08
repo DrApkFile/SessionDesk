@@ -84,6 +84,7 @@ async function everyMemberFacingReply(): Promise<readonly string[]> {
   await reuse.service.handle(
     reuse.message({ userId: MANAGER_ID, messageId: 95, text: "Open settings, then Account, then Reset.", replyToUserId: MEMBER, replyToText: "how do I reset my password?", mentionsBot: true }),
   );
+  await reuse.service.handle(reuse.message({ userId: MANAGER_ID, messageId: 595, text: "yes", mentionsBot: true }));
   await reuse.queue.settled();
   const answers = reuse.memory.stored.get(ANSWERS_NAMESPACE) ?? [];
   reuse.memory.configure({ searchHits: new Map([[ANSWERS_NAMESPACE, answers.map((line) => ({ text: line.text, blobId: line.blobId, distance: 0.05 }))]]) });
@@ -174,6 +175,7 @@ describe("did this help", () => {
     await field.service.handle(
       field.message({ userId: MANAGER_ID, messageId: 10, text: "Open settings, then Account, then Reset.", replyToUserId: MEMBER, replyToText: "how do I reset my password?", mentionsBot: true }),
     );
+    await field.service.handle(field.message({ userId: MANAGER_ID, messageId: 510, text: "yes", mentionsBot: true }));
     await field.queue.settled();
     const answers = field.memory.stored.get(ANSWERS_NAMESPACE) ?? [];
     field.memory.configure({ searchHits: new Map([[ANSWERS_NAMESPACE, answers.map((line) => ({ text: line.text, blobId: line.blobId, distance: 0.05 }))]]) });

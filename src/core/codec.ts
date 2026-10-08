@@ -19,8 +19,8 @@ export function encode(event: LedgerEvent): string {
   return parts.join("|");
 }
 
-export function decode(line: string): LedgerEvent | null {
-  const tokens = line.split("|");
+export function decode(stored: string): LedgerEvent | null {
+  const tokens = framedLine(stored).split("|");
   if (tokens.length < 4 || tokens[0] !== WIRE_VERSION) return null;
 
   const fields = new Map<string, string>();
@@ -48,6 +48,16 @@ export function decode(line: string): LedgerEvent | null {
   }
 
   return build(rawType, payload, Number(rawSeq), ts);
+}
+
+function framedLine(stored: string): string {
+  if (!stored.includes("\n")) return stored;
+  const lines = stored.split("\n");
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const line = lines[index];
+    if (line !== undefined && line.startsWith(`${WIRE_VERSION}|`)) return line;
+  }
+  return stored;
 }
 
 function decodeValue(value: string): string | null {

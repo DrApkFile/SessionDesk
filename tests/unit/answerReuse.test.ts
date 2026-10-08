@@ -14,9 +14,12 @@ function consent(field: Harness, userId: number): void {
 
 async function managerAnswers(field: Harness, question: string, answer: string, messageId = 10): Promise<void> {
   consent(field, MANAGER_ID);
-  await field.service.handle(
+  const proposed = await field.service.handle(
     field.message({ userId: MANAGER_ID, userName: "boss", messageId, text: answer, replyToUserId: MEMBER, replyToText: question, mentionsBot: true }),
   );
+  if (proposed.kind === "reply" && proposed.text.includes("Should I reuse")) {
+    await field.service.handle(field.message({ userId: MANAGER_ID, userName: "boss", messageId: messageId + 500, text: "yes", mentionsBot: true }));
+  }
   await field.queue.settled();
 }
 
@@ -30,9 +33,29 @@ describe("an answer given in the group becomes community memory", () => {
     expect(field.memory.stored.get(ANSWERS_NAMESPACE)).toHaveLength(1);
   });
 
-  it("stores nothing when the replied-to message is not a question", async () => {
+  it("stores nothing when there is no real question and no real answer", async () => {
     const field = harness({ classification: '{"kind":"other"}' });
-    await managerAnswers(field, "the login screen looks nice", "thanks");
+    await managerAnswers(field, "nice", "thanks");
+    expect(field.cache.state().answers.size).toBe(0);
+    expect(field.logLines.join("\n")).toContain("answer_not_captured");
+  });
+
+  it("captures a question with no question mark at all", async () => {
+    const field = harness({ classification: '{"kind":"other"}' });
+    await managerAnswers(field, "how do I reset my password", "Open Settings, then Account, then Reset password.");
+    expect(field.cache.state().answers.size).toBe(1);
+  });
+
+  it("asks the manager to confirm before keeping an answer, and forgets it on no", async () => {
+    const field = harness({ classification: '{"kind":"other"}' });
+    consent(field, MANAGER_ID);
+    const proposed = await field.service.handle(
+      field.message({ userId: MANAGER_ID, messageId: 60, text: "Open Settings, then Account, then Reset.", replyToUserId: MEMBER, replyToText: "how do I reset my password?", mentionsBot: true }),
+    );
+    expect(proposed.kind === "reply" && proposed.text).toContain("Should I reuse that answer");
+    expect(field.cache.state().answers.size).toBe(0);
+    const declined = await field.service.handle(field.message({ userId: MANAGER_ID, messageId: 61, text: "no", mentionsBot: true }));
+    expect(declined.kind === "reply" && declined.text).toContain("Forgotten");
     expect(field.cache.state().answers.size).toBe(0);
   });
 

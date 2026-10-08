@@ -8,7 +8,7 @@ private notes. Built for Walrus Sessions 8, "Chatbots That Remember".
 Build steps 1-5 of 7 done (PRD §12), plus the P1 items that matter for a real community: config,
 the pure core, the Walrus memory layer, the member bot, the manager bot, deployment, the evidence
 script, JUDGING.md, /report and the follow-up scheduler. Deployed on Render.
-`npm run gate` is green: typecheck, no-comments check, .env-not-tracked check, and 551 unit and
+`npm run gate` is green: typecheck, no-comments check, .env-not-tracked check, and 571 unit and
 adversarial tests (no network), run 2026-10-08 on Node 24.19.0 / Linux.
 The restore test has been run once against Walrus mainnet: evidence/restore-test-5c2ff4cb.json
 (6 blobs written, 35.7 s per write, cache wiped and rebuilt, status still correct).
@@ -230,6 +230,11 @@ than run half working.
 
 ### Other commands
 - `npm run setup` the guided wizard: asks for each value, checks it live, writes `.env`.
+- `npm run measure:answers` writes five question-and-answer pairs to a throwaway namespace in both
+  the old and new formats and prints how far each paraphrase lands from each. Use it to set
+  ANSWER_MAX_DISTANCE and KNOWN_ISSUE_MAX_DISTANCE. **Spends real points.**
+- `npm run resave:answers` rewrites existing answers in the searchable format so older answers
+  become findable. **Spends real points.**
 - `npm run evidence` per-member memory counts, blob ids with Walruscan links, and the agent id
   into `evidence/`. Reads mainnet, costs a few points.
 - `npm run test:live` the restore test: writes to mainnet, wipes the cache, rebuilds, compares.

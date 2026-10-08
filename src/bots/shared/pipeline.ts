@@ -1,4 +1,4 @@
-import { encode } from "../../core/codec.js";
+import { storedLine } from "../../core/searchableLine.js";
 import { stamp, type LedgerEvent } from "../../core/events.js";
 import { idempotencyKey, keyFromMaterial } from "../../core/idempotency.js";
 import { resolveNamespace } from "../../core/namespace.js";
@@ -42,7 +42,7 @@ export class EventPipeline {
   commit(writes: readonly CommittableWrite[], origin: WriteOrigin, now: Date): readonly RecordedWrite[] {
     return writes.map((write, index) => {
       const event = stamp(write.draft, this.#seq.next(), now.toISOString());
-      const text = encode(event);
+      const text = storedLine(event);
       const namespaces = write.namespaces.map((ref, refIndex) => {
         const namespace = resolveNamespace(this.#communityKey, ref);
         this.#cacheFor(namespace).record({

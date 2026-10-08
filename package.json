@@ -14,6 +14,8 @@
     "test": "vitest run tests/unit tests/adversarial",
     "test:live": "tsx --env-file=.env scripts/restore-test.ts",
     "evidence": "tsx --env-file=.env scripts/evidence.ts",
+    "measure:answers": "tsx --env-file=.env scripts/measure-answer-recall.ts",
+    "resave:answers": "tsx --env-file=.env scripts/resave-answers.ts",
     "check:comments": "node scripts/check-no-comments.mjs",
     "check:env": "node scripts/check-env-not-tracked.mjs",
     "gate": "npm run typecheck && npm run check:comments && npm run check:env && npm run test"

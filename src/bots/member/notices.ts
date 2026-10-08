@@ -99,3 +99,15 @@ export function correctDone(value: string): string {
 
 export const FEEDBACK_NOT_HELPFUL = "Thanks, I've passed your question to the team.";
 export const FEEDBACK_HELPFUL = "Good, thanks for telling me. I will keep using that answer.";
+
+export function confirmAnswerCapture(question: string, answer: string): string {
+  return [
+    "Should I reuse that answer when someone asks the same thing?",
+    `They asked: ${question}`,
+    `You said: ${answer}`,
+    "Reply yes and I will keep it for next time, or no and I will forget it.",
+  ].join("\n");
+}
+
+export const ANSWER_KEPT = "Kept. The next person who asks that gets your answer, with the date and a receipt.";
+export const ANSWER_DISCARDED = "Forgotten. I will not reuse that one.";

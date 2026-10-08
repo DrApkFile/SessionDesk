@@ -1,0 +1,346 @@
+{
+  "runId": "4bd0e04c",
+  "commit": "892370b",
+  "date": "2026-10-08T22:23:01.253Z",
+  "environment": "node v24.19.0 on linux",
+  "network": "walrus memory mainnet",
+  "pairs": 5,
+  "paraphrasesPerPair": 3,
+  "unrelatedQueries": 3,
+  "namespaces": {
+    "encoded": "sd-c1meas-aenc-4bd0e04c",
+    "plain": "sd-c1meas-aplain-4bd0e04c"
+  },
+  "formats": {
+    "encodedWireLineOnly": {
+      "paraphrasesTried": 15,
+      "rightAnswerWasTopHit": 15,
+      "rightAnswerReturnedAtAll": 15,
+      "bestMatchDistance": 0.3857611230898246,
+      "worstMatchDistance": 0.7128395000088739,
+      "meanMatchDistance": 0.521,
+      "bestUnrelatedDistance": 0.847,
+      "readings": [
+        {
+          "label": "paraphrase of Q1",
+          "query": "I forgot my password, what do I do",
+          "wantIndex": 0,
+          "topDistance": 0.501126926106735,
+          "topIsWanted": true,
+          "wantedDistance": 0.501126926106735
+        },
+        {
+          "label": "paraphrase of Q1",
+          "query": "where is the password reset option",
+          "wantIndex": 0,
+          "topDistance": 0.43763833736950175,
+          "topIsWanted": true,
+          "wantedDistance": 0.43763833736950175
+        },
+        {
+          "label": "paraphrase of Q1",
+          "query": "cant log in need to change my password",
+          "wantIndex": 0,
+          "topDistance": 0.517055036109317,
+          "topIsWanted": true,
+          "wantedDistance": 0.517055036109317
+        },
+        {
+          "label": "paraphrase of Q2",
+          "query": "can I use it with no internet",
+          "wantIndex": 1,
+          "topDistance": 0.47966923844496545,
+          "topIsWanted": true,
+          "wantedDistance": 0.47966923844496545
+        },
+        {
+          "label": "paraphrase of Q2",
+          "query": "what happens when I lose signal",
+          "wantIndex": 1,
+          "topDistance": 0.7128395000088739,
+          "topIsWanted": true,
+          "wantedDistance": 0.7128395000088739
+        },
+        {
+          "label": "paraphrase of Q2",
+          "query": "is there an offline mode",
+          "wantIndex": 1,
+          "topDistance": 0.449678461099576,
+          "topIsWanted": true,
+          "wantedDistance": 0.449678461099576
+        },
+        {
+          "label": "paraphrase of Q3",
+          "query": "can I switch it to french",
+          "wantIndex": 2,
+          "topDistance": 0.5255965436613361,
+          "topIsWanted": true,
+          "wantedDistance": 0.5255965436613361
+        },
+        {
+          "label": "paraphrase of Q3",
+          "query": "where do I pick a different language",
+          "wantIndex": 2,
+          "topDistance": 0.46875948552694846,
+          "topIsWanted": true,
+          "wantedDistance": 0.46875948552694846
+        },
+        {
+          "label": "paraphrase of Q3",
+          "query": "is yoruba supported",
+          "wantIndex": 2,
+          "topDistance": 0.5727587060166145,
+          "topIsWanted": true,
+          "wantedDistance": 0.5727587060166145
+        },
+        {
+          "label": "paraphrase of Q4",
+          "query": "my card keeps getting declined when I pay",
+          "wantIndex": 3,
+          "topDistance": 0.44757804628172915,
+          "topIsWanted": true,
+          "wantedDistance": 0.44757804628172915
+        },
+        {
+          "label": "paraphrase of Q4",
+          "query": "checkout wont accept my payment",
+          "wantIndex": 3,
+          "topDistance": 0.5846105683602926,
+          "topIsWanted": true,
+          "wantedDistance": 0.5846105683602926
+        },
+        {
+          "label": "paraphrase of Q4",
+          "query": "payment error at the end of the order",
+          "wantIndex": 3,
+          "topDistance": 0.5975182207363772,
+          "topIsWanted": true,
+          "wantedDistance": 0.5975182207363772
+        },
+        {
+          "label": "paraphrase of Q5",
+          "query": "how can I add a colleague",
+          "wantIndex": 4,
+          "topDistance": 0.551359841969421,
+          "topIsWanted": true,
+          "wantedDistance": 0.551359841969421
+        },
+        {
+          "label": "paraphrase of Q5",
+          "query": "where do I send a team invitation",
+          "wantIndex": 4,
+          "topDistance": 0.3857611230898246,
+          "topIsWanted": true,
+          "wantedDistance": 0.3857611230898246
+        },
+        {
+          "label": "paraphrase of Q5",
+          "query": "want to bring someone onto my workspace",
+          "wantIndex": 4,
+          "topDistance": 0.5867057041715982,
+          "topIsWanted": true,
+          "wantedDistance": 0.5867057041715982
+        },
+        {
+          "label": "unrelated",
+          "query": "what is the weather like today",
+          "wantIndex": null,
+          "topDistance": 0.8878736274341287,
+          "topIsWanted": false,
+          "wantedDistance": null
+        },
+        {
+          "label": "unrelated",
+          "query": "who won the match last night",
+          "wantIndex": null,
+          "topDistance": 0.8465584660200216,
+          "topIsWanted": false,
+          "wantedDistance": null
+        },
+        {
+          "label": "unrelated",
+          "query": "recommend a good restaurant nearby",
+          "wantIndex": null,
+          "topDistance": 0.8979734127251394,
+          "topIsWanted": false,
+          "wantedDistance": null
+        },
+        {
+          "label": "paraphrase of Q1 with a bot mention",
+          "query": "@sdmemberbot I forgot my password, what do I do",
+          "wantIndex": 0,
+          "topDistance": 0.47824963357086936,
+          "topIsWanted": true,
+          "wantedDistance": 0.47824963357086936
+        }
+      ]
+    },
+    "naturalLanguageFirst": {
+      "paraphrasesTried": 15,
+      "rightAnswerWasTopHit": 15,
+      "rightAnswerReturnedAtAll": 15,
+      "bestMatchDistance": 0.3645170729320323,
+      "worstMatchDistance": 0.6722945780084586,
+      "meanMatchDistance": 0.494,
+      "bestUnrelatedDistance": 0.865,
+      "readings": [
+        {
+          "label": "paraphrase of Q1",
+          "query": "I forgot my password, what do I do",
+          "wantIndex": 0,
+          "topDistance": 0.46958633339632416,
+          "topIsWanted": true,
+          "wantedDistance": 0.46958633339632416
+        },
+        {
+          "label": "paraphrase of Q1",
+          "query": "where is the password reset option",
+          "wantIndex": 0,
+          "topDistance": 0.4338773732824439,
+          "topIsWanted": true,
+          "wantedDistance": 0.4338773732824439
+        },
+        {
+          "label": "paraphrase of Q1",
+          "query": "cant log in need to change my password",
+          "wantIndex": 0,
+          "topDistance": 0.5022455260146428,
+          "topIsWanted": true,
+          "wantedDistance": 0.5022455260146428
+        },
+        {
+          "label": "paraphrase of Q2",
+          "query": "can I use it with no internet",
+          "wantIndex": 1,
+          "topDistance": 0.4790787288676527,
+          "topIsWanted": true,
+          "wantedDistance": 0.4790787288676527
+        },
+        {
+          "label": "paraphrase of Q2",
+          "query": "what happens when I lose signal",
+          "wantIndex": 1,
+          "topDistance": 0.6722945780084586,
+          "topIsWanted": true,
+          "wantedDistance": 0.6722945780084586
+        },
+        {
+          "label": "paraphrase of Q2",
+          "query": "is there an offline mode",
+          "wantIndex": 1,
+          "topDistance": 0.4459346665865985,
+          "topIsWanted": true,
+          "wantedDistance": 0.4459346665865985
+        },
+        {
+          "label": "paraphrase of Q3",
+          "query": "can I switch it to french",
+          "wantIndex": 2,
+          "topDistance": 0.5091192738257461,
+          "topIsWanted": true,
+          "wantedDistance": 0.5091192738257461
+        },
+        {
+          "label": "paraphrase of Q3",
+          "query": "where do I pick a different language",
+          "wantIndex": 2,
+          "topDistance": 0.4435859070271282,
+          "topIsWanted": true,
+          "wantedDistance": 0.4435859070271282
+        },
+        {
+          "label": "paraphrase of Q3",
+          "query": "is yoruba supported",
+          "wantIndex": 2,
+          "topDistance": 0.5452170931936378,
+          "topIsWanted": true,
+          "wantedDistance": 0.5452170931936378
+        },
+        {
+          "label": "paraphrase of Q4",
+          "query": "my card keeps getting declined when I pay",
+          "wantIndex": 3,
+          "topDistance": 0.4042898981906988,
+          "topIsWanted": true,
+          "wantedDistance": 0.4042898981906988
+        },
+        {
+          "label": "paraphrase of Q4",
+          "query": "checkout wont accept my payment",
+          "wantIndex": 3,
+          "topDistance": 0.521930105782971,
+          "topIsWanted": true,
+          "wantedDistance": 0.521930105782971
+        },
+        {
+          "label": "paraphrase of Q4",
+          "query": "payment error at the end of the order",
+          "wantIndex": 3,
+          "topDistance": 0.5470178740961545,
+          "topIsWanted": true,
+          "wantedDistance": 0.5470178740961545
+        },
+        {
+          "label": "paraphrase of Q5",
+          "query": "how can I add a colleague",
+          "wantIndex": 4,
+          "topDistance": 0.5196156763849437,
+          "topIsWanted": true,
+          "wantedDistance": 0.5196156763849437
+        },
+        {
+          "label": "paraphrase of Q5",
+          "query": "where do I send a team invitation",
+          "wantIndex": 4,
+          "topDistance": 0.3645170729320323,
+          "topIsWanted": true,
+          "wantedDistance": 0.3645170729320323
+        },
+        {
+          "label": "paraphrase of Q5",
+          "query": "want to bring someone onto my workspace",
+          "wantIndex": 4,
+          "topDistance": 0.5542284229228698,
+          "topIsWanted": true,
+          "wantedDistance": 0.5542284229228698
+        },
+        {
+          "label": "unrelated",
+          "query": "what is the weather like today",
+          "wantIndex": null,
+          "topDistance": 0.897871250222032,
+          "topIsWanted": false,
+          "wantedDistance": null
+        },
+        {
+          "label": "unrelated",
+          "query": "who won the match last night",
+          "wantIndex": null,
+          "topDistance": 0.8650061673343576,
+          "topIsWanted": false,
+          "wantedDistance": null
+        },
+        {
+          "label": "unrelated",
+          "query": "recommend a good restaurant nearby",
+          "wantIndex": null,
+          "topDistance": 0.9151911473140593,
+          "topIsWanted": false,
+          "wantedDistance": null
+        },
+        {
+          "label": "paraphrase of Q1 with a bot mention",
+          "query": "@sdmemberbot I forgot my password, what do I do",
+          "wantIndex": 0,
+          "topDistance": 0.4481422833962131,
+          "topIsWanted": true,
+          "wantedDistance": 0.4481422833962131
+        }
+      ]
+    }
+  },
+  "botMentionEffect": {
+    "encoded": 0.47824963357086936,
+    "plain": 0.4481422833962131
+  }
+}

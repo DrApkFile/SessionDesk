@@ -10,6 +10,11 @@ export interface SearchHit {
   readonly distance: number;
 }
 
+export type AnswerLookup =
+  | { readonly kind: "one"; readonly match: AnswerMatch }
+  | { readonly kind: "none"; readonly candidates: number }
+  | { readonly kind: "conflicting"; readonly matches: readonly AnswerMatch[] };
+
 export interface AnswerMatch {
   readonly answer: AnswerRecord;
   readonly blobId: string;
@@ -33,12 +38,12 @@ function withinThreshold(hits: readonly SearchHit[], maxDistance: number): reado
   return hits.filter((hit) => hit.distance <= maxDistance);
 }
 
-export function matchAnswer(
+export function lookUpAnswer(
   state: CommunityState,
   hits: readonly SearchHit[],
   idOf: (text: string) => string | null,
   maxDistance: number = ANSWER_MAX_DISTANCE,
-): AnswerMatch | null {
+): AnswerLookup {
   const candidates = withinThreshold(hits, maxDistance)
     .map((hit) => {
       const answerId = idOf(hit.text);
@@ -46,9 +51,21 @@ export function matchAnswer(
       return answer === undefined || answer.state !== "active" ? null : { answer, blobId: hit.blobId, distance: hit.distance };
     })
     .filter((candidate): candidate is AnswerMatch => candidate !== null);
-  const unique = [...new Map(candidates.map((candidate) => [candidate.answer.answerId, candidate])).values()];
+  const unique = [...new Map(candidates.map((candidate) => [candidate.answer.answerId, candidate])).values()].sort((left, right) => left.distance - right.distance);
   const matched = onlyMatch(unique, () => true);
-  return matched.kind === "one" ? matched.value : null;
+  if (matched.kind === "one") return { kind: "one", match: matched.value };
+  if (matched.kind === "none") return { kind: "none", candidates: 0 };
+  return { kind: "conflicting", matches: unique };
+}
+
+export function matchAnswer(
+  state: CommunityState,
+  hits: readonly SearchHit[],
+  idOf: (text: string) => string | null,
+  maxDistance: number = ANSWER_MAX_DISTANCE,
+): AnswerMatch | null {
+  const looked = lookUpAnswer(state, hits, idOf, maxDistance);
+  return looked.kind === "one" ? looked.match : null;
 }
 
 export function matchKnownIssue(

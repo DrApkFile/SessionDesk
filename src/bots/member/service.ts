@@ -3,10 +3,12 @@ import { ERRORS } from "../../core/errors.js";
 import { buildFactsSheet, templateReply } from "../../core/factsSheet.js";
 import { memberHash, resolveNamespace } from "../../core/namespace.js";
 import { readFeedback } from "../../core/feedbackWords.js";
+import { captureVerdict } from "../../core/reusableAnswer.js";
+import type { MessageKind } from "../../core/vocabulary.js";
 import { guardStoredText } from "../../core/redactor.js";
-import { ANSWER_FEEDBACK_WINDOW_MINUTES } from "../../core/tuning.js";
+import { ANSWER_FEEDBACK_WINDOW_MINUTES, ANSWER_MAX_DISTANCE, KNOWN_ISSUE_MAX_DISTANCE } from "../../core/tuning.js";
 import { clipStoredText } from "../../core/text.js";
-import { earlierAnswerReply, findEarlierAnswer, findKnownIssue, knownIssueReply } from "./reuse.js";
+import { conflictingAnswersReply, earlierAnswerReply, findEarlierAnswer, findKnownIssue, knownIssueReply } from "./reuse.js";
 import type { CommittableWrite } from "../shared/pipeline.js";
 import { internalLeakIn, reviewReply } from "../../core/replyGuard.js";
 import { planWrites, themeFor, type PlannedWrite } from "../../core/writeGate.js";
@@ -29,7 +31,10 @@ import {
   SECRET_WARNING,
   FEEDBACK_HELPFUL,
   FEEDBACK_NOT_HELPFUL,
+  ANSWER_DISCARDED,
+  ANSWER_KEPT,
   TAP_ALREADY,
+  confirmAnswerCapture,
   tapNeedsDmStart,
   tapWelcome,
   type ConsentScope,
@@ -53,6 +58,7 @@ export interface TapOutcome {
 export class MemberService {
   readonly #deps: MemberDeps;
   readonly #offers = new Map<string, { answerId: string; at: number }>();
+  readonly #candidates = new Map<string, { question: string; answer: string; label: string | undefined; at: number }>();
 
   constructor(deps: MemberDeps) {
     this.#deps = deps;
@@ -119,34 +125,64 @@ export class MemberService {
     this.#deps.log.say("dm_address_stored", { memberH, note: "telegram id stored encrypted for promise follow-ups" });
   }
 
-  #captureAnswer(message: IncomingMessage, label: string | undefined): readonly CommittableWrite[] {
+  #proposeAnswerCapture(message: IncomingMessage, kind: MessageKind, label: string | undefined): MemberAction | null {
     const question = message.replyToText;
-    if (question === null || message.replyToUserId === null || message.replyToIsBot) return [];
-    if (!question.includes("?")) return [];
-    if (!this.#deps.managerIds.includes(userKey(message.platform, message.userId))) return [];
-    if (this.#deps.managerIds.includes(userKey(message.platform, message.replyToUserId))) return [];
+    if (question === null || message.replyToUserId === null || message.replyToIsBot) return null;
+    if (!this.#deps.managerIds.includes(userKey(message.platform, message.userId))) return null;
+    if (this.#deps.managerIds.includes(userKey(message.platform, message.replyToUserId))) return null;
     if (!guardStoredText(question).ok || !guardStoredText(message.text).ok) {
       this.#deps.log.say("answer_secret_blocked", { chat: chatLabel(message) });
-      return [];
+      return null;
     }
+    const verdict = captureVerdict(kind, question, message.text);
+    if (!verdict.worth) {
+      this.#deps.log.say("answer_not_captured", { chat: chatLabel(message), because: verdict.because });
+      return null;
+    }
+    this.#candidates.set(`${message.chatId}|${userKey(message.platform, message.userId)}`, {
+      question: clipStoredText(question),
+      answer: clipStoredText(message.text),
+      label,
+      at: this.#deps.clock.now().getTime(),
+    });
+    this.#deps.log.say("answer_proposed", { chat: chatLabel(message), awaitingConfirmation: true });
+    return reply(confirmAnswerCapture(clipStoredText(question), clipStoredText(message.text)));
+  }
+
+  #readCaptureConfirmation(message: IncomingMessage): MemberAction | null {
+    const key = `${message.chatId}|${userKey(message.platform, message.userId)}`;
+    const candidate = this.#candidates.get(key);
+    if (candidate === undefined) return null;
+    if ((this.#deps.clock.now().getTime() - candidate.at) / 60_000 > ANSWER_FEEDBACK_WINDOW_MINUTES) {
+      this.#candidates.delete(key);
+      return null;
+    }
+    const reading = readFeedback(message.text);
+    if (reading === "unclear") return null;
+    this.#candidates.delete(key);
+    if (reading === "unhelpful") {
+      this.#deps.log.say("answer_discarded", { chat: chatLabel(message) });
+      return reply(ANSWER_DISCARDED);
+    }
+
     const state = this.#deps.cache.state();
-    const theme = themeFor(label, [...state.themes.values()].map((held) => ({ themeId: held.themeId, label: held.label })), this.#deps.ids);
-    if (!theme.ok) return [];
+    const theme = themeFor(candidate.label, [...state.themes.values()].map((held) => ({ themeId: held.themeId, label: held.label })), this.#deps.ids);
+    if (!theme.ok) return reply(ANSWER_DISCARDED);
     const created: readonly CommittableWrite[] = theme.value.created === null ? [] : [{ draft: theme.value.created, namespaces: [{ kind: "themes" }] }];
-    return [
-      ...created,
-      {
-        draft: {
-          type: "ANSWER",
-          answerId: this.#deps.ids.newAnswerId(),
-          questionText: clipStoredText(question),
-          answerText: clipStoredText(message.text),
-          answeredBy: "manager",
-          themeId: theme.value.themeId,
+    const answerId = this.#deps.ids.newAnswerId();
+    this.#deps.pipeline.commit(
+      [
+        ...created,
+        {
+          draft: { type: "ANSWER", answerId, questionText: candidate.question, answerText: candidate.answer, answeredBy: "manager", themeId: theme.value.themeId },
+          namespaces: [{ kind: "answers" }],
         },
-        namespaces: [{ kind: "answers" }],
-      },
-    ];
+      ],
+      { chatId: message.chatId, messageId: message.messageId },
+      this.#deps.clock.now(),
+    );
+    this.#deps.log.say("answer_kept", { chat: chatLabel(message), answerId });
+    return reply(ANSWER_KEPT);
   }
 
   #captureThankedAnswer(message: IncomingMessage, kind: string, planned: readonly PlannedWrite[], label: string | undefined): readonly CommittableWrite[] {
@@ -282,6 +318,9 @@ export class MemberService {
       return message.mentionsBot ? reply(GROUP_OPTIN_PROMPT, true) : silent("no consent, not mentioned");
     }
 
+    const confirmed = this.#readCaptureConfirmation(message);
+    if (confirmed !== null) return confirmed;
+
     const feedback = this.#readAnswerFeedback(message, memberH);
     if (feedback !== null) return feedback;
 
@@ -313,15 +352,19 @@ export class MemberService {
 
     const kind = classified.value.classification.kind;
     const planned = this.#planFor(classified.value.classification, message.text, memberH, this.#helperFor(message));
-    const answerWrites = [
-      ...this.#captureAnswer(message, classified.value.classification.themeLabel),
-      ...this.#captureThankedAnswer(message, kind, planned, classified.value.classification.themeLabel),
-    ];
+    const answerWrites = this.#captureThankedAnswer(message, kind, planned, classified.value.classification.themeLabel);
 
     let knownIssue = null;
     let writes: readonly CommittableWrite[] = [...planned, ...answerWrites];
     if ((kind === "bug" || kind === "feature" || kind === "feedback") && planned.some((write) => write.draft.type === "ITEM_OPENED")) {
       knownIssue = await findKnownIssue(this.#deps.memory, this.#deps.communityKey, this.#deps.cache.state(), message.text);
+      this.#deps.log.say("known_issue_attempt", {
+        memberH,
+        classifiedAs: kind,
+        maxDistance: KNOWN_ISSUE_MAX_DISTANCE,
+        decision: knownIssue === null ? "none" : "one",
+        distance: knownIssue === null ? "" : Math.round(knownIssue.distance * 1000) / 1000,
+      });
       if (knownIssue !== null) {
         writes = [
           { draft: { type: "ITEM_AFFECTS", itemId: knownIssue.item.itemId, memberH }, namespaces: [{ kind: "member", memberH }, { kind: "items" }] },
@@ -329,6 +372,8 @@ export class MemberService {
         ];
       }
     }
+
+    const proposal = this.#proposeAnswerCapture(message, kind, classified.value.classification.themeLabel);
 
     if (writes.length > 0) {
       const recorded = this.#deps.pipeline.commit(writes, { chatId: message.chatId, messageId: message.messageId }, this.#deps.clock.now());
@@ -348,12 +393,31 @@ export class MemberService {
       return this.#speak(message, knownIssueReply(knownIssue, affected));
     }
 
+    if (proposal !== null) return proposal;
+
     if (kind === "question") {
-      const earlier = await findEarlierAnswer(this.#deps.memory, this.#deps.communityKey, this.#deps.cache.state(), message.text);
-      if (earlier !== null) {
-        this.#deps.log.say("answer_reused", { answerId: earlier.answer.answerId, distance: earlier.distance, memberH });
-        this.#offerPending(message, memberH, earlier.answer.answerId);
-        return this.#speak(message, earlierAnswerReply(earlier));
+      const attempt = await findEarlierAnswer(this.#deps.memory, this.#deps.communityKey, this.#deps.cache.state(), message.text);
+      this.#deps.log.say("reuse_attempt", {
+        memberH,
+        classifiedAs: kind,
+        classifier: classified.value.classifier,
+        candidates: attempt.candidates,
+        topDistances: attempt.topDistances.join(","),
+        maxDistance: ANSWER_MAX_DISTANCE,
+        decision: attempt.lookup.kind,
+      });
+      if (attempt.lookup.kind === "one") {
+        this.#deps.log.say("answer_reused", {
+          memberH,
+          answerId: attempt.lookup.match.answer.answerId,
+          distance: Math.round(attempt.lookup.match.distance * 1000) / 1000,
+        });
+        this.#offerPending(message, memberH, attempt.lookup.match.answer.answerId);
+        return this.#speak(message, earlierAnswerReply(attempt.lookup.match));
+      }
+      if (attempt.lookup.kind === "conflicting") {
+        this.#deps.log.say("reuse_conflict", { memberH, answers: attempt.lookup.matches.map((match) => match.answer.answerId).join(",") });
+        return this.#speak(message, conflictingAnswersReply(attempt.lookup.matches));
       }
     }
 

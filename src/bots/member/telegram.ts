@@ -3,6 +3,7 @@ import type { Log } from "../shared/log.js";
 import { requirePrivacyDisabled, type BotHandle, type BotIdentity, type CommunityChat } from "../shared/startup.js";
 import type { IncomingMessage, MemberAction } from "../shared/incoming.js";
 import { chatKindOfTelegram } from "../../platform/telegramShapes.js";
+import { strippedTelegramText } from "../../platform/telegram/mentions.js";
 import { CONSENT_SCOPES, dmStartLink, type ConsentScope } from "./notices.js";
 import type { MemberService } from "./service.js";
 
@@ -40,11 +41,14 @@ export function toIncoming(context: Context, identity: BotIdentity): IncomingMes
     userId: String(from.id),
     isBot: from.is_bot,
     userName: from.username ?? null,
-    text,
+    text: strippedTelegramText(text, identity.username),
     mentionsBot: readMention(text, entities, identity.username) || replyTo?.from?.id === identity.id,
     replyToUserId: replyTo?.from?.id === undefined ? null : String(replyTo.from.id),
     replyToIsBot: replyTo?.from?.is_bot ?? false,
-    replyToText: replyTo?.text ?? replyTo?.caption ?? null,
+    replyToText: ((): string | null => {
+      const parent = replyTo?.text ?? replyTo?.caption ?? null;
+      return parent === null ? null : strippedTelegramText(parent, identity.username);
+    })(),
   };
 }
 

@@ -1,5 +1,5 @@
 import { decode } from "../../core/codec.js";
-import { matchAnswer, matchKnownIssue, type AnswerMatch, type KnownIssueMatch, type SearchHit } from "../../core/answers.js";
+import { lookUpAnswer, matchKnownIssue, type AnswerLookup, type AnswerMatch, type KnownIssueMatch, type SearchHit } from "../../core/answers.js";
 import { resolveNamespace } from "../../core/namespace.js";
 import {
   ANSWER_MAX_DISTANCE,
@@ -28,10 +28,28 @@ async function hitsFor(memory: MemoryPort, namespace: string, query: string, lim
   return found.value.lines.map((line) => ({ text: line.text, blobId: line.blobId, distance: line.distance ?? maxDistance }));
 }
 
-export async function findEarlierAnswer(memory: MemoryPort, communityKey: string, state: CommunityState, question: string): Promise<AnswerMatch | null> {
+export interface ReuseAttempt {
+  readonly lookup: AnswerLookup;
+  readonly candidates: number;
+  readonly topDistances: readonly number[];
+}
+
+export async function findEarlierAnswer(memory: MemoryPort, communityKey: string, state: CommunityState, question: string): Promise<ReuseAttempt> {
   const namespace = resolveNamespace(communityKey, { kind: "answers" });
   const hits = await hitsFor(memory, namespace, question, ANSWER_SEARCH_LIMIT, ANSWER_MAX_DISTANCE);
-  return matchAnswer(state, hits, answerIdIn);
+  return {
+    lookup: lookUpAnswer(state, hits, answerIdIn),
+    candidates: hits.length,
+    topDistances: hits.slice(0, 3).map((hit) => Math.round(hit.distance * 1000) / 1000),
+  };
+}
+
+export function conflictingAnswersReply(matches: readonly AnswerMatch[]): string {
+  return [
+    "That has been answered here more than once, and the answers do not agree, so I will not pick one for you.",
+    ...matches.slice(0, 2).map((match, index) => `${index === 0 ? "One" : "Another"} said: ${match.answer.answerText}`),
+    "I have flagged it so a manager can tidy it up.",
+  ].join("\n");
 }
 
 export async function findKnownIssue(memory: MemoryPort, communityKey: string, state: CommunityState, report: string): Promise<KnownIssueMatch | null> {

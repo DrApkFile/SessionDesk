@@ -55,6 +55,19 @@ Everything here was measured on mainnet, not assumed. Spike details: `briefing/R
 | Gemini returns 503 "high demand" | reproduced | spike S12. Hence the retry, the Groq fallback and the hold buffer |
 | Boot rebuild after a restart on the deployed service | `namespaces=1 lines=1 maxSeq=1 nextSeq=2` | Render log, 2026-10-07 |
 
+## The measured claim: answer reuse distances
+
+Run `4bd0e04c` · commit `892370b` · 2026-10-08T22:23Z · mainnet · 5 question-and-answer pairs,
+3 paraphrases each, plus 3 unrelated queries.
+
+| Format | Right answer top hit | True paraphrases | Closest unrelated | Gap |
+|---|---|---|---|---|
+| Encoded wire line only | 15/15 | 0.386 – 0.713 | 0.847 | 0.134 |
+| Natural language first | 15/15 | 0.365 – 0.672 | 0.865 | **0.193** |
+
+Thresholds come from the natural-language row: `ANSWER_MAX_DISTANCE` 0.72, just above the furthest
+true paraphrase; `KNOWN_ISSUE_MAX_DISTANCE` 0.6, stricter on purpose.
+
 ## The measured claim: stale status in the model's context
 
 Pre-registered in `docs/DECISIONS.md` **before** the run, and published as it came out.
@@ -145,6 +158,17 @@ when both env and events exist **env wins** — tested both ways.
   types (discord.js 14.23.2, @slack/bolt 4.4.0) and unit-tested, but no message has gone through
   a real gateway or Socket Mode connection. Treat them as untested in production until a live run
   is recorded here.
+- **Answer reuse never fired until 2026-10-08 because the distance threshold was set below any
+  real match.** Measured on mainnet (run `4bd0e04c`): true paraphrases land at 0.365 to 0.672 and
+  the closest unrelated query at 0.865, while `ANSWER_MAX_DISTANCE` was 0.32. It is now 0.72, just
+  above the furthest true paraphrase. `KNOWN_ISSUE_MAX_DISTANCE` is 0.6, deliberately stricter and
+  extrapolated rather than measured, because a wrong known-issue link silently swallows a real
+  report while a wrong answer reuse is recoverable.
+- **The storage format change is an improvement, not the fix.** Both formats ranked the right
+  answer first in 15 of 15 paraphrases; natural language widened the gap from 0.134 to 0.193.
+- **The six answers currently on mainnet are junk** captured before the substance check existed
+  ("she no call me o", a question that was literally "?"). They are listed by `/answers` and should
+  be retired with `/retire`.
 - **Answer reuse needs exactly one clear match.** Two answers within the distance threshold means
   none is reused, by design. Thresholds are in `src/core/tuning.ts`.
 - **An answer recorded from a thanked member reply has no question text**, because Telegram does

@@ -154,7 +154,11 @@ function apply(state: CommunityState, entry: LedgerEntry, seenBySeq: Map<number,
       return;
     }
     case "ANSWER": {
-      if (state.answers.has(event.answerId)) return reject(state);
+      const already = state.answers.get(event.answerId);
+      if (already !== undefined) {
+        const identical = already.answerText === event.answerText && already.questionText === (event.questionText ?? null);
+        return identical ? undefined : reject(state);
+      }
       state.answers.set(event.answerId, {
         answerId: event.answerId,
         questionText: event.questionText ?? null,
