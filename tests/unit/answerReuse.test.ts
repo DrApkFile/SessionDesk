@@ -374,3 +374,110 @@ describe("a question too short or too vague to match is never matched", () => {
     expect(query.worthMatching).toBe(false);
   });
 });
+
+describe("a question that differs by one key term is asked about, not answered from the wrong record", () => {
+  async function fieldWithAnswerAbout(question: string, answer: string, distance = 0.2): Promise<Harness> {
+    const field = harness({ classification: '{"kind":"other"}' });
+    const event = {
+      type: "ANSWER",
+      answerId: "a-faucet",
+      questionText: question,
+      answerText: answer,
+      answeredBy: "manager",
+      themeId: "t-faucet",
+      seq: 310,
+      ts: "2026-10-07T09:00:00.000Z",
+      confirmed: true,
+    } as const satisfies LedgerEvent;
+    field.cache.record({ seq: 310, namespace: ANSWERS_NAMESPACE, memberH: null, event, state: "saved", blobId: "bfaucet", code: null });
+    field.memory.configure({ searchHits: new Map([[ANSWERS_NAMESPACE, [{ text: storedLine(event), blobId: "bfaucet", distance }]]]) });
+    field.classifyAs('{"kind":"question","themeLabel":"faucet"}');
+    consent(field, MEMBER);
+    return field;
+  }
+
+  const SUI_QUESTION = "how do I get testnet SUI?";
+  const SUI_ANSWER = "Open the faucet page, paste your wallet and wait a minute.";
+
+  async function ask(field: Harness, text: string, messageId: number): Promise<string> {
+    const action = await field.service.handle(field.message({ userId: MEMBER, chatId: MEMBER, chatType: "private", messageId, text }));
+    return action.kind === "reply" ? action.text : "";
+  }
+
+  it("asks which one the member means, naming both terms, and shows neither answer", async () => {
+    const field = await fieldWithAnswerAbout(SUI_QUESTION, SUI_ANSWER);
+    const said = await ask(field, "how do I get testnet SOL?", 120);
+    expect(said).toContain("I have an answer about SUI");
+    expect(said).toContain("are you asking about SOL");
+    expect(said).not.toContain("faucet page");
+    expect(field.logLines.join("\n")).toContain("reuse_clarification_asked");
+    expect(field.logLines.join("\n")).toContain("decision=unclear");
+  });
+
+  it("reuses the answer when the member says yes", async () => {
+    const field = await fieldWithAnswerAbout(SUI_QUESTION, SUI_ANSWER);
+    await ask(field, "how do I get testnet SOL?", 121);
+    const said = await ask(field, "yes", 122);
+    expect(said).toContain("This came up before");
+    expect(said).toContain("Open the faucet page");
+    expect(said).toContain("https://walruscan.com/mainnet/blob/");
+  });
+
+  it("answers the member's own question when they say no, and never shows the stored answer", async () => {
+    const field = await fieldWithAnswerAbout(SUI_QUESTION, SUI_ANSWER);
+    await ask(field, "how do I get testnet SOL?", 123);
+    const said = await ask(field, "no", 124);
+    expect(said).not.toContain("This came up before");
+    expect(said).not.toContain("faucet page");
+    expect(field.logLines.join("\n")).toContain("reuse_declined");
+  });
+
+  it("reuses it without asking when the question names the same terms in another order", async () => {
+    const field = await fieldWithAnswerAbout(SUI_QUESTION, SUI_ANSWER);
+    const said = await ask(field, "where do I get SUI on testnet", 125);
+    expect(said).toContain("This came up before");
+    expect(said).toContain("Open the faucet page");
+    expect(field.logLines.join("\n")).not.toContain("reuse_clarification_asked");
+  });
+
+  it("records the terms it compared in the log, with no user id", async () => {
+    const field = await fieldWithAnswerAbout(SUI_QUESTION, SUI_ANSWER);
+    await ask(field, "how do I get testnet SOL?", 126);
+    const attempt = field.logLines.find((line) => line.includes("reuse_attempt")) ?? "";
+    expect(attempt).toContain("askedTerms=");
+    expect(attempt).toContain("termsOnlyInQuestion=sol");
+    expect(attempt).toContain("termsOnlyInAnswer=sui");
+    expect(attempt).not.toContain(String(MEMBER));
+  });
+});
+
+describe("a bug report is merged into a known issue only when it names the same things", () => {
+  async function fieldWithAndroidItem(distance: number): Promise<Harness> {
+    const field = harness({ classification: '{"kind":"bug","themeLabel":"android login"}', replyText: "Filed." });
+    consent(field, OTHER);
+    await field.service.handle(field.message({ userId: OTHER, chatId: OTHER, chatType: "private", messageId: 130, text: "android login fails on 2.3" }));
+    await field.queue.settled();
+    const stored = field.memory.stored.get(ITEMS_NAMESPACE) ?? [];
+    field.memory.configure({ searchHits: new Map([[ITEMS_NAMESPACE, stored.map((line) => ({ text: line.text, blobId: line.blobId, distance }))]]) });
+    consent(field, MEMBER);
+    return field;
+  }
+
+  it("opens its own item for an ios report rather than merging it into the android one", async () => {
+    const field = await fieldWithAndroidItem(0.1);
+    const before = [...field.cache.state().items.values()].length;
+    const action = await field.service.handle(field.message({ userId: MEMBER, chatId: MEMBER, chatType: "private", messageId: 131, text: "ios login fails" }));
+    expect([...field.cache.state().items.values()]).toHaveLength(before + 1);
+    expect(action.kind === "reply" && action.text).not.toContain("The team already knows about this");
+    expect(field.logLines.join("\n")).toContain("decision=terms_differ");
+    expect(field.logLines.join("\n")).toContain("termsOnlyInReport=ios");
+  });
+
+  it("still merges a report that names nothing the item does not", async () => {
+    const field = await fieldWithAndroidItem(0.1);
+    const before = [...field.cache.state().items.values()].length;
+    const action = await field.service.handle(field.message({ userId: MEMBER, chatId: MEMBER, chatType: "private", messageId: 132, text: "I also cannot log in on android" }));
+    expect([...field.cache.state().items.values()]).toHaveLength(before);
+    expect(action.kind === "reply" && action.text).toContain("The team already knows about this");
+  });
+});

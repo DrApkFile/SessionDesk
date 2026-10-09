@@ -1,4 +1,5 @@
 import { onlyMatch } from "./onlyMatch.js";
+import { agreeOnKeyTerms, agreeOnReportTerms, type TermAgreement } from "./keyTerms.js";
 import { refuse, ok, type Result } from "./result.js";
 import type { AnswerRecord, CommunityState, ItemFacts } from "./state.js";
 import { ANSWER_MAX_DISTANCE, KNOWN_ISSUE_MAX_DISTANCE } from "./tuning.js";
@@ -13,6 +14,7 @@ export interface SearchHit {
 export type AnswerLookup =
   | { readonly kind: "one"; readonly match: AnswerMatch }
   | { readonly kind: "none"; readonly candidates: number }
+  | { readonly kind: "unclear"; readonly match: AnswerMatch; readonly agreement: TermAgreement }
   | { readonly kind: "conflicting"; readonly matches: readonly AnswerMatch[] };
 
 export interface AnswerMatch {
@@ -48,6 +50,7 @@ export function lookUpAnswer(
   state: CommunityState,
   hits: readonly SearchHit[],
   idOf: (text: string) => string | null,
+  question: string,
   maxDistance: number = ANSWER_MAX_DISTANCE,
 ): AnswerLookup {
   const candidates = withinThreshold(hits, maxDistance)
@@ -59,27 +62,36 @@ export function lookUpAnswer(
     .filter((candidate): candidate is AnswerMatch => candidate !== null);
   const unique = [...new Map(candidates.map((candidate) => [candidate.answer.answerId, candidate])).values()].sort((left, right) => left.distance - right.distance);
   const matched = onlyMatch(unique, () => true);
-  if (matched.kind === "one") return { kind: "one", match: matched.value };
   if (matched.kind === "none") return { kind: "none", candidates: 0 };
-  return { kind: "conflicting", matches: unique };
+  if (matched.kind === "many") return { kind: "conflicting", matches: unique };
+  const agreement = agreeOnKeyTerms(question, matched.value.answer.questionText, matched.value.answer.answerText);
+  if (!agreement.agree) return { kind: "unclear", match: matched.value, agreement };
+  return { kind: "one", match: matched.value };
 }
 
 export function matchAnswer(
   state: CommunityState,
   hits: readonly SearchHit[],
   idOf: (text: string) => string | null,
+  question: string,
   maxDistance: number = ANSWER_MAX_DISTANCE,
 ): AnswerMatch | null {
-  const looked = lookUpAnswer(state, hits, idOf, maxDistance);
+  const looked = lookUpAnswer(state, hits, idOf, question, maxDistance);
   return looked.kind === "one" ? looked.match : null;
 }
 
-export function matchKnownIssue(
+export type KnownIssueLookup =
+  | { readonly kind: "one"; readonly match: KnownIssueMatch; readonly agreement: TermAgreement }
+  | { readonly kind: "none" }
+  | { readonly kind: "terms_differ"; readonly match: KnownIssueMatch; readonly agreement: TermAgreement };
+
+export function lookUpKnownIssue(
   state: CommunityState,
   hits: readonly SearchHit[],
   idOf: (text: string) => string | null,
+  report: string,
   maxDistance: number = KNOWN_ISSUE_MAX_DISTANCE,
-): KnownIssueMatch | null {
+): KnownIssueLookup {
   const open: readonly string[] = OPEN_ITEM_STATUSES;
   const candidates = withinThreshold(hits, maxDistance)
     .map((hit) => {
@@ -90,5 +102,19 @@ export function matchKnownIssue(
     .filter((candidate): candidate is KnownIssueMatch => candidate !== null);
   const unique = [...new Map(candidates.map((candidate) => [candidate.item.itemId, candidate])).values()];
   const matched = onlyMatch(unique, () => true);
-  return matched.kind === "one" ? matched.value : null;
+  if (matched.kind !== "one") return { kind: "none" };
+  const agreement = agreeOnReportTerms(report, matched.value.item.text);
+  if (!agreement.agree) return { kind: "terms_differ", match: matched.value, agreement };
+  return { kind: "one", match: matched.value, agreement };
+}
+
+export function matchKnownIssue(
+  state: CommunityState,
+  hits: readonly SearchHit[],
+  idOf: (text: string) => string | null,
+  report: string,
+  maxDistance: number = KNOWN_ISSUE_MAX_DISTANCE,
+): KnownIssueMatch | null {
+  const looked = lookUpKnownIssue(state, hits, idOf, report, maxDistance);
+  return looked.kind === "one" ? looked.match : null;
 }

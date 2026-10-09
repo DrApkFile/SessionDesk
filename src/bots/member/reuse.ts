@@ -1,6 +1,7 @@
 import { decode } from "../../core/codec.js";
-import { lookUpAnswer, matchKnownIssue, type AnswerLookup, type AnswerMatch, type KnownIssueMatch, type SearchHit } from "../../core/answers.js";
+import { lookUpAnswer, lookUpKnownIssue, type AnswerLookup, type AnswerMatch, type KnownIssueLookup, type KnownIssueMatch, type SearchHit } from "../../core/answers.js";
 import { resolveNamespace } from "../../core/namespace.js";
+import { keyTermsIn } from "../../core/keyTerms.js";
 import {
   ANSWER_MAX_DISTANCE,
   ANSWER_SEARCH_LIMIT,
@@ -28,23 +29,50 @@ async function hitsFor(memory: MemoryPort, namespace: string, query: string, lim
   return found.value.lines.map((line) => ({ text: line.text, blobId: line.blobId, distance: line.distance ?? maxDistance }));
 }
 
+export interface ReuseTerms {
+  readonly asked: readonly string[];
+  readonly stored: readonly string[];
+  readonly onlyAsked: readonly string[];
+  readonly onlyStored: readonly string[];
+}
+
 export interface ReuseAttempt {
   readonly lookup: AnswerLookup;
   readonly candidates: number;
   readonly topDistances: readonly number[];
+  readonly terms: ReuseTerms;
+}
+
+export function termsSaid(terms: readonly string[]): string {
+  return terms.length === 0 ? "none" : terms.join(" ");
 }
 
 export async function findEarlierAnswer(memory: MemoryPort, communityKey: string, state: CommunityState, question: string): Promise<ReuseAttempt> {
   const namespace = resolveNamespace(communityKey, { kind: "answers" });
   const hits = await hitsFor(memory, namespace, question, ANSWER_SEARCH_LIMIT, ANSWER_MAX_DISTANCE);
+  const lookup = lookUpAnswer(state, hits, answerIdIn, question);
+  const agreement = lookup.kind === "unclear" ? lookup.agreement : null;
   return {
-    lookup: lookUpAnswer(state, hits, answerIdIn),
+    lookup,
     candidates: hits.length,
     topDistances: hits.slice(0, 3).map((hit) => Math.round(hit.distance * 1000) / 1000),
+    terms: {
+      asked: agreement === null ? keyTermsIn(question).map((key) => key.term) : agreement.asked,
+      stored: agreement === null ? [] : agreement.stored,
+      onlyAsked: agreement === null ? [] : agreement.onlyAsked.map((key) => key.term),
+      onlyStored: agreement === null ? [] : agreement.onlyStored.map((key) => key.term),
+    },
   };
 }
 
 export const CONFLICTING_ANSWERS_REPLY = "I've seen different answers to this, so I've asked the team to confirm.";
+
+export function clarifyWhichReply(storedTerm: string, askedTerm: string): string {
+  return [
+    `I have an answer about ${storedTerm}. Is that what you mean, or are you asking about ${askedTerm}?`,
+    "Reply yes and I will show you that answer, or no and I will answer your question as it stands.",
+  ].join("\n");
+}
 
 export function conflictingAnswersReply(): string {
   return CONFLICTING_ANSWERS_REPLY;
@@ -59,10 +87,10 @@ export function conflictNoteForManagers(question: string, matches: readonly Answ
   ].join("\n");
 }
 
-export async function findKnownIssue(memory: MemoryPort, communityKey: string, state: CommunityState, report: string): Promise<KnownIssueMatch | null> {
+export async function findKnownIssue(memory: MemoryPort, communityKey: string, state: CommunityState, report: string): Promise<KnownIssueLookup> {
   const namespace = resolveNamespace(communityKey, { kind: "items" });
   const hits = await hitsFor(memory, namespace, report, KNOWN_ISSUE_SEARCH_LIMIT, KNOWN_ISSUE_MAX_DISTANCE);
-  return matchKnownIssue(state, hits, itemIdIn);
+  return lookUpKnownIssue(state, hits, itemIdIn, report);
 }
 
 export function earlierAnswerReply(match: AnswerMatch): string {

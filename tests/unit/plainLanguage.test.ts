@@ -6,6 +6,8 @@ import { PLAIN_STATUS } from "../../src/core/plainWords.js";
 import { ITEM_STATUSES } from "../../src/core/vocabulary.js";
 import { clipForMember, describePlainly } from "../../src/bots/member/describe.js";
 import { CONFLICTING_ANSWERS_REPLY } from "../../src/bots/member/reuse.js";
+import { storedLine } from "../../src/core/searchableLine.js";
+import type { LedgerEvent } from "../../src/core/events.js";
 import { MYDATA_TEXT_CHARS } from "../../src/core/tuning.js";
 import { GROUP_CHAT_ID, MANAGER_ID, harness, type Harness } from "../support/memberHarness.js";
 
@@ -114,6 +116,25 @@ async function everyMemberFacingReply(): Promise<readonly string[]> {
   keep(conflicting.kind === "reply" && conflicting.text);
   expect(conflicting.kind === "reply" && conflicting.text).toBe(CONFLICTING_ANSWERS_REPLY);
 
+  const unclear = harness({ classification: '{"kind":"question","themeLabel":"faucet"}' });
+  unclear.service.recordConsent(MEMBER, MEMBER, 1, "storage");
+  const stored = {
+    type: "ANSWER",
+    answerId: "a-faucet",
+    questionText: "how do I get testnet SUI?",
+    answerText: "Open the faucet page, paste your wallet and wait a minute.",
+    answeredBy: "manager",
+    themeId: "t-faucet",
+    seq: 310,
+    ts: "2026-10-07T09:00:00.000Z",
+    confirmed: true,
+  } as const satisfies LedgerEvent;
+  unclear.cache.record({ seq: 310, namespace: ANSWERS_NAMESPACE, memberH: null, event: stored, state: "saved", blobId: "bfaucet", code: null });
+  unclear.memory.configure({ searchHits: new Map([[ANSWERS_NAMESPACE, [{ text: storedLine(stored), blobId: "bfaucet", distance: 0.2 }]]]) });
+  const asked = await unclear.service.handle(unclear.message({ userId: MEMBER, chatId: MEMBER, chatType: "private", messageId: 140, text: "how do I get testnet SOL?" }));
+  keep(asked.kind === "reply" && asked.text);
+  expect(asked.kind === "reply" && asked.text).toContain("I have an answer about SUI");
+
   return said;
 }
 
@@ -136,7 +157,7 @@ function confirmPending(field: Harness): void {
 describe("a member never sees an internal format", () => {
   it("keeps every reply the member bot can send free of ids, labels and status codes", async () => {
     const said = await everyMemberFacingReply();
-    expect(said.length).toBeGreaterThan(15);
+    expect(said.length).toBeGreaterThan(16);
     for (const text of said) assertPlain(text);
   });
 

@@ -34,6 +34,7 @@ changes, across a restart**. Not "the bot remembers you said hello".
 | An earlier answer is reused instead of re-answered | `/confirm` the answer in the manager bot first, then ask the question again: the reply names who answered, the date and a Walruscan receipt, and asks "did this help?" | `tests/unit/answerReuse.test.ts`, `/answers` |
 | An unconfirmed answer is never reused | Ask something matching one of the six legacy answers: you get a normal reply, and `/answers` shows it as NOT CONFIRMED with Keep and Discard buttons | `tests/unit/answerReuse.test.ts` |
 | Capture is never announced in the group | Reply to a member's question as a manager: the group sees nothing about it, and each manager gets a DM with the question, the answer and Keep / Discard | `tests/unit/answerReuse.test.ts` |
+| Two questions differing by one term are not the same question | Ask about a token, network, device or version the stored answer does not name: the bot asks which you mean and shows nothing until you say yes | `tests/unit/keyTerms.test.ts`, `tests/unit/answerReuse.test.ts` |
 | A vague question is not matched at all | Mention the bot with "what's <someone> fixed?": the log says `reuse_skipped` with the content-word count, and no search runs | `tests/unit/reuseQuery.test.ts` |
 | A duplicate bug is linked, not opened twice | Report something already on record: the reply gives the existing item's current status and counts you as affected | `tests/unit/answerReuse.test.ts` |
 | A promise follow-up survives a restart | `DM_ADDRESS` is restored from Walrus at boot, so a member who agreed to DMs is reachable without speaking again | `tests/unit/dmAddress.test.ts` |
@@ -188,6 +189,12 @@ when both env and events exist **env wins** — tested both ways.
   decodes as `pending`. The six junk answers already there ("she no call me o", a question that was
   literally "?") are therefore inert without rewriting history. A manager promotes an answer with
   `/confirm <answerId>` or the Keep button, and `/answers` names the pending ids.
+- **Distance alone cannot tell two named things apart.** "how do I get testnet SUI?" and "how do
+  I get testnet SOL?" were reused as the same question on 2026-10-09, because the sentences differ
+  by one ticker and sit far inside any usable threshold. A semantic match must now also pass a
+  key-term check in code, and a mismatch produces a question to the member rather than a guess.
+  Measured against run `4bd0e04c`, all 15 paraphrases still pass the check, and that is pinned by
+  a test.
 - **A false match reached the group once**, on 2026-10-09 with the threshold at 0.72: "what's
   Kenne fixed?" drew the conflict reply, which then quoted two members' off-topic remarks back to
   the group. Four defences now stand between that message and a reply, each sufficient alone:

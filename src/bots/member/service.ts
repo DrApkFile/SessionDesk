@@ -11,11 +11,13 @@ import { guardStoredText } from "../../core/redactor.js";
 import { ANSWER_FEEDBACK_WINDOW_MINUTES, ANSWER_MAX_DISTANCE, KNOWN_ISSUE_MAX_DISTANCE, MIN_REUSE_CONTENT_WORDS } from "../../core/tuning.js";
 import { clipStoredText } from "../../core/text.js";
 import { lookUpCommunityKnowledge } from "./communityLookup.js";
-import { conflictNoteForManagers, conflictingAnswersReply, earlierAnswerReply, findEarlierAnswer, findKnownIssue, knownIssueReply } from "./reuse.js";
+import { clarifyWhichReply, conflictNoteForManagers, conflictingAnswersReply, earlierAnswerReply, findEarlierAnswer, findKnownIssue, knownIssueReply, termsSaid } from "./reuse.js";
 import { captureChoices, decisionChoices } from "../shared/answerDecisions.js";
 import { NO_MANAGER_REACHABLE, answerToConfirmNotice } from "../shared/answerNotice.js";
 import type { AnswerSource } from "../../core/vocabulary.js";
 import { reuseQueryOf, strippedOfNames } from "../../core/reuseQuery.js";
+import { keyTermsIn, type TermAgreement } from "../../core/keyTerms.js";
+import type { AnswerMatch } from "../../core/answers.js";
 import type { CommittableWrite } from "../shared/pipeline.js";
 import { internalLeakIn, reviewReply } from "../../core/replyGuard.js";
 import { planWrites, themeFor, type PlannedWrite } from "../../core/writeGate.js";
@@ -70,6 +72,7 @@ export interface TapOutcome {
 export class MemberService {
   readonly #deps: MemberDeps;
   readonly #offers = new Map<string, { answerId: string; at: number }>();
+  readonly #pendingClarifications = new Map<string, { answerId: string; blobId: string; question: string; at: number }>();
 
   constructor(deps: MemberDeps) {
     this.#deps = deps;
@@ -293,6 +296,52 @@ export class MemberService {
     return { ignored: false, wrote: true, alert };
   }
 
+  async #askWhichQuestion(message: IncomingMessage, memberH: string, match: AnswerMatch, agreement: TermAgreement): Promise<MemberAction> {
+    const storedTerm = agreement.onlyStored[0]?.surface ?? keyTermsIn(match.answer.answerText)[0]?.surface ?? null;
+    const askedTerm = agreement.onlyAsked[0]?.surface ?? null;
+    if (storedTerm === null || askedTerm === null) {
+      this.#deps.log.say("reuse_withheld", { memberH, answerId: match.answer.answerId, reason: "key terms differ and neither side can be named" });
+      return this.#answer(message, memberH, false, false);
+    }
+    this.#pendingClarifications.set(`${message.chatId}|${memberH}`, {
+      answerId: match.answer.answerId,
+      blobId: match.blobId,
+      question: message.text,
+      at: this.#deps.clock.now().getTime(),
+    });
+    this.#deps.log.say("reuse_clarification_asked", {
+      memberH,
+      answerId: match.answer.answerId,
+      storedTerm,
+      askedTerm,
+    });
+    return reply(clarifyWhichReply(storedTerm, askedTerm));
+  }
+
+  async #readClarification(message: IncomingMessage, memberH: string): Promise<MemberAction | null> {
+    const key = `${message.chatId}|${memberH}`;
+    const pending = this.#pendingClarifications.get(key);
+    if (pending === undefined) return null;
+    if ((this.#deps.clock.now().getTime() - pending.at) / 60_000 > ANSWER_FEEDBACK_WINDOW_MINUTES) {
+      this.#pendingClarifications.delete(key);
+      return null;
+    }
+    const reading = readFeedback(message.text);
+    if (reading === "unclear") {
+      this.#pendingClarifications.delete(key);
+      return null;
+    }
+    this.#pendingClarifications.delete(key);
+    const answer = this.#deps.cache.state().answers.get(pending.answerId);
+    if (reading === "helpful" && answer !== undefined && answer.state === "active") {
+      this.#deps.log.say("answer_reused", { memberH, answerId: answer.answerId, after: "clarification" });
+      this.#offerPending(message, memberH, answer.answerId);
+      return this.#speak(message, earlierAnswerReply({ answer, blobId: pending.blobId, distance: 0 }));
+    }
+    this.#deps.log.say("reuse_declined", { memberH, answerId: pending.answerId });
+    return this.#answer({ ...message, text: pending.question }, memberH, false, false);
+  }
+
   #offerPending(message: IncomingMessage, memberH: string, answerId: string): void {
     this.#offers.set(`${message.chatId}|${memberH}`, { answerId, at: this.#deps.clock.now().getTime() });
   }
@@ -328,6 +377,9 @@ export class MemberService {
       if (isPrivate(message)) return reply(CONSENT_NOTICE, true);
       return message.mentionsBot ? reply(GROUP_OPTIN_PROMPT, true) : silent("no consent, not mentioned");
     }
+
+    const clarified = await this.#readClarification(message, memberH);
+    if (clarified !== null) return clarified;
 
     const feedback = this.#readAnswerFeedback(message, memberH);
     if (feedback !== null) return feedback;
@@ -369,13 +421,18 @@ export class MemberService {
     let knownIssue = null;
     let writes: readonly CommittableWrite[] = [...planned, ...answerWrites];
     if ((kind === "bug" || kind === "feature" || kind === "feedback") && planned.some((write) => write.draft.type === "ITEM_OPENED")) {
-      knownIssue = await findKnownIssue(this.#deps.memory, this.#deps.communityKey, this.#deps.cache.state(), message.text);
+      const looked = await findKnownIssue(this.#deps.memory, this.#deps.communityKey, this.#deps.cache.state(), message.text);
+      knownIssue = looked.kind === "one" ? looked.match : null;
+      const near = looked.kind === "none" ? null : looked.match;
       this.#deps.log.say("known_issue_attempt", {
         memberH,
         classifiedAs: kind,
         maxDistance: KNOWN_ISSUE_MAX_DISTANCE,
-        decision: knownIssue === null ? "none" : "one",
-        distance: knownIssue === null ? "" : Math.round(knownIssue.distance * 1000) / 1000,
+        decision: looked.kind,
+        distance: near === null ? "" : Math.round(near.distance * 1000) / 1000,
+        reportTerms: looked.kind === "none" ? "" : termsSaid(looked.agreement.asked),
+        itemTerms: looked.kind === "none" ? "" : termsSaid(looked.agreement.stored),
+        termsOnlyInReport: looked.kind === "terms_differ" ? termsSaid(looked.agreement.onlyAsked.map((key) => key.term)) : "",
       });
       if (knownIssue !== null) {
         writes = [
@@ -425,7 +482,14 @@ export class MemberService {
           topDistances: attempt.topDistances.join(","),
           maxDistance: ANSWER_MAX_DISTANCE,
           decision: attempt.lookup.kind,
+          askedTerms: termsSaid(attempt.terms.asked),
+          storedTerms: termsSaid(attempt.terms.stored),
+          termsOnlyInQuestion: termsSaid(attempt.terms.onlyAsked),
+          termsOnlyInAnswer: termsSaid(attempt.terms.onlyStored),
         });
+        if (attempt.lookup.kind === "unclear") {
+          return this.#askWhichQuestion(message, memberH, attempt.lookup.match, attempt.lookup.agreement);
+        }
         if (attempt.lookup.kind === "one") {
           this.#deps.log.say("answer_reused", {
             memberH,

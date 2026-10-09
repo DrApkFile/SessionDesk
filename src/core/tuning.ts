@@ -53,3 +53,34 @@ export const PLAIN_RECALL_TOP_K = 5;
 export const ANSWER_FEEDBACK_WINDOW_MINUTES = 30;
 
 export const MYDATA_TEXT_CHARS = 160;
+
+export const NETWORK_NAMES = ["mainnet", "testnet", "devnet", "localnet", "staging", "sandbox", "prod", "production"] as const;
+
+export const DEVICE_NAMES = ["android", "ios", "iphone", "ipad", "windows", "macos", "mac", "linux", "web", "desktop", "mobile", "tablet", "chrome", "safari", "firefox", "edge"] as const;
+
+export const COMMON_WORDS = [
+  "a","able","about","above","accept","accepted","accepts","access","account","accounts","across","actually","add","added","adding","address","addresses","affect","affected","affects","after","again","against","ago","all","allowed","anymore","anyway","available","allow","allowed","already","also","always","am","an","and","another","answer","answered","any","anybody","anyone","anything","app","apps","are","around","as","ask","asked","asking","at","away",
+  "back","bad","balance","be","browser","build","because","been","before","being","below","best","better","between","both","bring","broke","broken","bug","but","button","buy","by",
+  "call","called","can","cannot","cant","card","cards","care","case","cash","chain","chains","change","changed","changes","charge","charged","chat","check","checked","checkout","clear","clears","click","clicked","close","closed","code","colleague","come","comes","coming","company","confirm","confirmed","connect","connected","connection","contact","cost","could","create","created","customer",
+  "data","date","day","days","delete","deleted","detail","details","device","did","different","disable","disabled","do","does","doing","done","dont","down","download","due","during",
+  "each","earlier","early","edit","either","else","email","emails","end","enough","enter","entered","error","errors","even","eventually","ever","every","everyone","everything","exactly","example","expect","expected",
+  "fail","failed","failing","fails","far","fast","feature","fee","fees","few","file","fill","find","fine","first","fix","fixed","fixing","follow","for","forget","forgot","forgotten","form","free","friend","from","full",
+  "get","gets","getting","give","given","go","goes","going","gone","good","got","group",
+  "had","happen","happened","happening","happens","has","have","having","he","help","helped","her","here","him","his","hold","home","how","however",
+  "i","if","im","in","info","information","input","instead","internet","into","invite","invited","invitation","is","issue","it","its","ive",
+  "join","joined","just",
+  "keep","keeps","kept","key","know","known","knows",
+  "language","last","late","later","least","leave","left","less","let","like","limit","line","link","list","little","live","load","loading","log","login","long","look","looking","lose","lost","lot",
+  "made","mail","main","make","makes","making","many","may","maybe","me","mean","means","member","members","message","messages","might","mine","minute","minutes","miss","missing","mistake","mode","money","month","more","most","move","much","must","my",
+  "name","near","need","needed","needs","neither","network","never","new","news","next","nice","no","nobody","none","not","note","nothing","now","number",
+  "of","off","offline","often","ok","okay","old","on","once","one","online","only","onto","open","opened","option","options","or","order","orders","other","others","our","out","over","own",
+  "page","paid","part","pass","password","pay","payment","payments","people","per","phone","pick","place","plan","please","pls","point","points","possible","post","press","price","probably","problem","process","put",
+  "question","questions","quick",
+  "rather","read","ready","real","really","reason","receive","received","refund","register","remove","removed","reply","report","reported","request","reset","rest","right","run","running",
+  "same","save","saved","say","says","screen","simply","somehow","supported","supporting","supports","second","see","seen","select","send","sent","service","set","setting","settings","share","shared","should","show","shows","side","sign","signal","signin","signup","since","site","slow","so","some","somebody","someone","something","soon","sorry","sort","start","started","state","status","stay","step","still","stop","stopped","such","support","sure","switch","sync","syncs","system",
+  "take","takes","team","tell","token","tokens","than","thank","thanks","that","the","their","them","then","there","these","they","thing","things","think","this","those","though","three","through","time","times","to","today","told","too","took","top","total","transfer","try","trying","turn","two","type",
+  "under","understand","until","up","update","updated","upgrade","upgraded","upload","us","use","used","user","users","using","usually",
+  "value","version","very","via","view",
+  "wait","waiting","wallet","wallets","want","wanted","was","way","we","week","weeks","well","went","were","what","whatever","when","where","whether","which","while","who","why","will","with","within","without","wont","word","work","worked","working","works","workspace","would","write","wrong",
+  "year","years","yes","yet","you","your","yours",
+] as const;

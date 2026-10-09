@@ -52,7 +52,12 @@ The restore test has been run once against Walrus mainnet: evidence/restore-test
 - Community answers: when a manager answers a member's question, or a member's reply is thanked,
   the answer becomes community memory as unconfirmed. Nothing is posted in the group: the manager
   bot DMs every manager the question and the answer with Keep and Discard buttons, and the answer
-  is reusable only after a Keep (or /confirm). If no manager can be DMed it waits in /answers. The next person to ask gets the
+  is reusable only after a Keep (or /confirm). If no manager can be DMed it waits in /answers.
+- Key-term agreement: a semantic match is reused only when both questions name the same
+  distinctive things - tickers, networks, devices, versions, and any word the common-word list in
+  src/core/tuning.ts does not hold. "testnet SUI" and "testnet SOL" are not the same question, so
+  the bot asks which one you mean and shows nothing until you say yes. The same check stops an ios
+  bug report being merged into an android item The next person to ask gets the
   confirmed answer, who gave it, the date and a Walruscan receipt, but only when exactly one
   answer is close enough and the question carries at least two words of its own.
   /answers lists them with whether each is confirmed, /retire stops one being reused
