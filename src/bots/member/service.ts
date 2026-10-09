@@ -8,7 +8,7 @@ import type { ItemVisibility } from "../../core/vocabulary.js";
 import { captureVerdict } from "../../core/reusableAnswer.js";
 import type { MessageKind } from "../../core/vocabulary.js";
 import { guardStoredText } from "../../core/redactor.js";
-import { ANSWER_FEEDBACK_WINDOW_MINUTES, ANSWER_MAX_DISTANCE, KNOWN_ISSUE_MAX_DISTANCE, MIN_REUSE_CONTENT_WORDS } from "../../core/tuning.js";
+import { ANSWER_FEEDBACK_WINDOW_MINUTES, ANSWER_MAX_DISTANCE, KNOWN_ISSUE_MAX_DISTANCE, MIN_REUSE_CONTENT_WORDS, THEME_LABELS_OFFERED } from "../../core/tuning.js";
 import { clipStoredText } from "../../core/text.js";
 import { lookUpCommunityKnowledge } from "./communityLookup.js";
 import { clarifyWhichReply, conflictNoteForManagers, conflictingAnswersReply, earlierAnswerReply, findEarlierAnswer, findKnownIssue, knownIssueReply, termsSaid } from "./reuse.js";
@@ -390,7 +390,7 @@ export class MemberService {
       return reply(SECRET_WARNING);
     }
 
-    const classified = await this.#deps.classifier.classify(message.text);
+    const classified = await this.#deps.classifier.classify(message.text, this.#knownThemeLabels());
     if (!classified.ok) {
       this.#deps.pending.hold({
         memberH,
@@ -604,6 +604,13 @@ export class MemberService {
       tried: answered.value.tried.map((attempt) => `${attempt.model}:${attempt.outcome}`).join(" "),
     });
     return reply(`${answered.value.text.trim()}${suffix}`);
+  }
+
+  #knownThemeLabels(): readonly string[] {
+    return [...this.#deps.cache.state().themes.values()]
+      .sort((left, right) => right.itemIds.length + right.questionCount - (left.itemIds.length + left.questionCount))
+      .slice(0, THEME_LABELS_OFFERED)
+      .map((theme) => theme.label);
   }
 
   #knownNames(): readonly string[] {

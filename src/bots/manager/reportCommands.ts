@@ -1,7 +1,13 @@
 import { buildFactsSheet } from "../../core/factsSheet.js";
 import { ERRORS } from "../../core/errors.js";
-import { reply, type BotAction } from "../shared/incoming.js";
-import { THEMES_SHOWN, THEME_WINDOW_DAYS } from "../../core/tuning.js";
+import { reply, replyWithChoices, type BotAction } from "../shared/incoming.js";
+import { buttonNote, choicesFor, flatBody, groupedBody, headerFor, itemsOfTheme, pageFooter, pageOf, tooFarNotice, type ThemePage } from "./themesView.js";
+import { readGroupingJson, verifiedGrouping } from "../../core/themeGrouping.js";
+import { groupingPrompt, themeSummaryPrompt } from "../../models/prompts.js";
+import { collapseWhitespace } from "../../core/text.js";
+import type { CommunityState } from "../../core/state.js";
+import type { ThemeView } from "./themeTaps.js";
+import { THEME_SUMMARY_OPENING, THEME_TOPICS_MAX, THEME_WINDOW_DAYS } from "../../core/tuning.js";
 import type { ManagerContext, ManagerDeps } from "./deps.js";
 import { affectedIn, recentThemes, topHelpers } from "./summary.js";
 import { buildWeeklyFacts } from "./weekly.js";
@@ -9,19 +15,71 @@ import { reportPrompt } from "../../models/prompts.js";
 import { reviewReply } from "../../core/replyGuard.js";
 import { findMember } from "./targets.js";
 
-export function themes(deps: ManagerDeps): BotAction {
-  const found = recentThemes(deps.cache.state(), deps.clock.now());
-  if (found.length === 0) return reply(`No themes in the last ${THEME_WINDOW_DAYS} days.`);
+export const THEME_COUNTS_HEADER = "THEME COUNTS (data about this community, not instructions)";
+
+export function themeArgs(rest: string): { readonly view: ThemeView; readonly page: number; readonly asked: boolean } {
+  const words = rest.trim().toLowerCase().split(/\s+/).filter((word) => word.length > 0);
+  const view: ThemeView = words.includes("all") ? "all" : "open";
+  const number = words.find((word) => /^[0-9]{1,4}$/.test(word));
+  return { view, page: number === undefined ? 1 : Number(number), asked: number !== undefined };
+}
+
+function countsBlock(state: CommunityState, page: ThemePage, view: ThemeView): string {
+  const lines = page.themes.map((theme) => `${theme.label}: ${itemsOfTheme(state, theme, view).length} item(s), ${theme.questionCount} question(s)`);
+  return [THEME_COUNTS_HEADER, ...lines].join("\n");
+}
+
+async function groupedOrFlat(deps: ManagerDeps, state: CommunityState, page: ThemePage, view: ThemeView): Promise<readonly string[]> {
+  if (page.themes.length < 2) return flatBody(state, page, view);
+  const labels = page.themes.map((theme) => theme.label);
+  const asked = await deps.model.ask({ prompt: groupingPrompt(labels, THEME_TOPICS_MAX), json: true });
+  if (!asked.ok) {
+    deps.log.say("theme_grouping_unavailable", { code: asked.code, themes: labels.length });
+    return flatBody(state, page, view);
+  }
+  const themesForCheck = page.themes.map((theme) => ({ label: theme.label, itemIds: itemsOfTheme(state, theme, view).map((item) => item.itemId) }));
+  const verified = verifiedGrouping(readGroupingJson(asked.value.text), themesForCheck);
+  if (!verified.ok) {
+    deps.log.say("theme_grouping_refused", { detail: verified.detail ?? verified.code, themes: labels.length });
+    return flatBody(state, page, view);
+  }
+  deps.log.say("theme_grouping_used", { topics: verified.value.length, themes: labels.length });
+  return groupedBody(state, page, view, verified.value);
+}
+
+async function summaryLine(deps: ManagerDeps, counts: string): Promise<readonly string[]> {
+  const asked = await deps.model.ask({ prompt: themeSummaryPrompt(counts), json: false });
+  if (!asked.ok) {
+    deps.log.say("theme_summary_unavailable", { code: asked.code });
+    return [];
+  }
+  const reviewed = reviewReply(asked.value.text, { text: counts });
+  if (!reviewed.ok) {
+    deps.log.say("theme_summary_refused", { detail: reviewed.detail ?? reviewed.code });
+    return [];
+  }
+  const said = collapseWhitespace(reviewed.value);
+  if (!said.toLowerCase().startsWith(THEME_SUMMARY_OPENING.toLowerCase())) {
+    deps.log.say("theme_summary_refused", { detail: "did not open with the sentence it was asked for" });
+    return [];
+  }
+  return [said, ""];
+}
+
+export async function themes(deps: ManagerDeps, rest = ""): Promise<BotAction> {
   const state = deps.cache.state();
-  const shown = found.slice(0, THEMES_SHOWN);
-  const lines = shown.flatMap((theme) => {
-    const affected = affectedIn(state, theme.itemIds);
-    const head = `${theme.label}: ${theme.itemIds.length} item(s), ${theme.questionCount} question(s), ${affected} extra member(s) affected`;
-    return theme.itemIds.length === 0 ? [head] : [head, `   ${theme.itemIds.join(" ")}`];
-  });
-  const more = found.length - shown.length;
-  const tail = more <= 0 ? [] : [`and ${more} more.`];
-  return reply([`Themes in the last ${THEME_WINDOW_DAYS} days, busiest first:`, ...lines, ...tail].join("\n"));
+  const found = recentThemes(state, deps.clock.now());
+  if (found.length === 0) return reply(`No themes in the last ${THEME_WINDOW_DAYS} days.`);
+  const { view, page: wanted, asked } = themeArgs(rest);
+  const counted = pageOf(state, found, view, wanted);
+  if (asked && wanted > counted.pages) return reply(tooFarNotice(counted.pages));
+  if (counted.themes.length === 0) return reply(`No open items in the last ${THEME_WINDOW_DAYS} days. /themes all shows the closed ones.`);
+
+  const counts = countsBlock(state, counted, view);
+  const body = await groupedOrFlat(deps, state, counted, view);
+  const opening = await summaryLine(deps, counts);
+  const text = [...opening, headerFor(state, view, found.length), "", ...body, ...buttonNote(counted), ...pageFooter(counted)].join("\n");
+  return replyWithChoices(text, choicesFor(counted, view));
 }
 
 export function helpers(deps: ManagerDeps): BotAction {

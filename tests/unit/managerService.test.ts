@@ -383,7 +383,7 @@ describe("affected counts are visible to the manager", () => {
     openItem(field);
     affect(field, "i-abc123", "b".repeat(24));
     affect(field, "i-abc123", "c".repeat(24));
-    expect(await field.ask("/themes")).toContain("2 extra member(s) affected");
+    expect(await field.ask("/themes")).toContain("2 more affected");
   });
 
   it("/member shows the items that also affect them", async () => {
@@ -508,10 +508,10 @@ describe("the Keep and Retire buttons on a conflict notice", () => {
     expect(answerDecisionIn("answer:destroy:a-1")).toBeNull();
   });
 
-  it("confirms the answer when a manager taps Keep", () => {
+  it("confirms the answer when a manager taps Keep", async () => {
     const field = managerHarness();
     recordLegacyAnswer(field);
-    const outcome = field.service.decisionFromTap({
+    const outcome = await field.service.decisionFromTap({
       platform: "telegram",
       userId: String(MANAGER_ID),
       chatId: String(MANAGER_ID),
@@ -524,10 +524,10 @@ describe("the Keep and Retire buttons on a conflict notice", () => {
     expect(field.cache.state().answers.get("a-legacy")?.state).toBe("active");
   });
 
-  it("retires the answer when a manager taps Retire", () => {
+  it("retires the answer when a manager taps Retire", async () => {
     const field = managerHarness();
     recordLegacyAnswer(field);
-    const outcome = field.service.decisionFromTap({
+    const outcome = await field.service.decisionFromTap({
       platform: "telegram",
       userId: String(MANAGER_ID),
       chatId: String(MANAGER_ID),
@@ -539,10 +539,10 @@ describe("the Keep and Retire buttons on a conflict notice", () => {
     expect(field.cache.state().answers.get("a-legacy")?.state).toBe("retired");
   });
 
-  it("changes nothing when someone who is not a manager taps", () => {
+  it("changes nothing when someone who is not a manager taps", async () => {
     const field = managerHarness();
     recordLegacyAnswer(field);
-    const outcome = field.service.decisionFromTap({
+    const outcome = await field.service.decisionFromTap({
       platform: "telegram",
       userId: String(OUTSIDER_ID),
       chatId: String(OUTSIDER_ID),
@@ -555,15 +555,15 @@ describe("the Keep and Retire buttons on a conflict notice", () => {
     expect(field.logLines.join("\n")).toContain("not_manager");
   });
 
-  it("ignores a tap it did not send", () => {
+  it("ignores a tap it did not send", async () => {
     const field = managerHarness();
-    expect(field.service.decisionFromTap({
+    expect(await field.service.decisionFromTap({
       platform: "telegram",
       userId: String(MANAGER_ID),
       chatId: String(MANAGER_ID),
       chatKind: "direct",
       messageId: "93",
       callback: "consent:storage",
-    })).toEqual({ ignored: true, alert: "" });
+    })).toEqual({ ignored: true, alert: "", action: null });
   });
 });

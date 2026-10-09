@@ -46,14 +46,14 @@ export class Classifier {
     return this.#probeDueAt;
   }
 
-  async classify(text: string): Promise<Result<Classified>> {
+  async classify(text: string, knownLabels: readonly string[] = []): Promise<Result<Classified>> {
     const now = this.#clock.now();
     const onFallback = this.pastWindow();
     const probing = onFallback && (this.#probeDueAt === null || now.getTime() >= this.#probeDueAt.getTime());
     let detail = "not attempted";
 
     if (!onFallback || probing) {
-      const viaPrimary = await this.#ask(this.#primary, text, "gemini");
+      const viaPrimary = await this.#ask(this.#primary, text, "gemini", knownLabels);
       if (viaPrimary.ok) {
         this.#primaryDownSince = null;
         this.#probeDueAt = null;
@@ -65,13 +65,13 @@ export class Classifier {
       if (!onFallback) return refuse("MODEL_UNAVAILABLE", detail);
     }
 
-    const viaFallback = await this.#ask(this.#fallback, text, "groq_fallback");
+    const viaFallback = await this.#ask(this.#fallback, text, "groq_fallback", knownLabels);
     if (viaFallback.ok) return viaFallback;
     return refuse("MODEL_UNAVAILABLE", `${detail}; ${viaFallback.detail ?? viaFallback.code}`);
   }
 
-  async #ask(model: TextModel, text: string, classifier: ClassifierName): Promise<Result<Classified>> {
-    const asked = await model.ask({ prompt: classifyPrompt(text), json: true });
+  async #ask(model: TextModel, text: string, classifier: ClassifierName, knownLabels: readonly string[]): Promise<Result<Classified>> {
+    const asked = await model.ask({ prompt: classifyPrompt(text, knownLabels), json: true });
     if (!asked.ok) return asked;
     const read = readClassificationJson(asked.value.text);
     return ok({ classification: read.classification, classifier, wellFormed: read.wellFormed, model: asked.value.model });

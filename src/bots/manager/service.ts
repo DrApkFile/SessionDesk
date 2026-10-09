@@ -15,12 +15,14 @@ import { listNotes, writeNote } from "./noteCommands.js";
 import { donePromise, makePromise, owed } from "./promiseCommands.js";
 import { helpers, memberCard, status, themes, weeklyReport } from "./reportCommands.js";
 import { changeStatus, isStatusCommand } from "./statusCommands.js";
+import { ITEM_ACTION_COMMANDS, itemTapIn, pageTapIn } from "./themeTaps.js";
 import { buildSummary } from "./summary.js";
 import { grantAmbassador, revokeAmbassador } from "./tierCommands.js";
 
 export interface ManagerTapOutcome {
   readonly ignored: boolean;
   readonly alert: string;
+  readonly action: BotAction | null;
 }
 
 export class ManagerService {
@@ -73,7 +75,7 @@ export class ManagerService {
     if (name === "/setup") return setupCommunity(this.#deps, context);
     if (isStatusCommand(name)) return changeStatus(this.#deps, context, name, rest);
     if (name === "/owed") return owed(this.#deps);
-    if (name === "/themes") return themes(this.#deps);
+    if (name === "/themes") return themes(this.#deps, rest);
     if (name === "/helpers") return helpers(this.#deps);
     if (name === "/member") return memberCard(this.#deps, context, rest);
     if (name === "/promise") return makePromise(this.#deps, context, rest);
@@ -90,9 +92,11 @@ export class ManagerService {
     return reply(MANAGER_HELP);
   }
 
-  decisionFromTap(tap: ButtonTap): ManagerTapOutcome {
+  async decisionFromTap(tap: ButtonTap): Promise<ManagerTapOutcome> {
     const decision = answerDecisionIn(tap.callback);
-    if (decision === null) return { ignored: true, alert: "" };
+    const pageTap = pageTapIn(tap.callback);
+    const itemTap = itemTapIn(tap.callback);
+    if (decision === null && pageTap === null && itemTap === null) return { ignored: true, alert: "", action: null };
     const message: IncomingMessage = {
       platform: tap.platform,
       chatId: tap.chatId,
@@ -108,12 +112,21 @@ export class ManagerService {
       replyToText: null,
     };
     if (!this.#mayManage(message)) {
-      this.#deps.log.say("not_manager", { platform: tap.platform, chat: tap.chatKind, reason: "tapped an answer button without manager rights" });
-      return { ignored: false, alert: ONLY_MANAGERS_POPUP };
+      this.#deps.log.say("not_manager", { platform: tap.platform, chat: tap.chatKind, reason: "tapped a button without manager rights" });
+      return { ignored: false, alert: ONLY_MANAGERS_POPUP, action: null };
     }
     const context: ManagerContext = { message, managerId: tap.userId, replyToMemberH: null };
+    if (pageTap !== null) {
+      const page = await themes(this.#deps, `${pageTap.view === "all" ? "all " : ""}${pageTap.page}`);
+      return { ignored: false, alert: "", action: page };
+    }
+    if (itemTap !== null) {
+      const changed = changeStatus(this.#deps, context, ITEM_ACTION_COMMANDS[itemTap.action], itemTap.itemId);
+      return { ignored: false, alert: changed.kind === "reply" ? changed.text : "", action: null };
+    }
+    if (decision === null) return { ignored: true, alert: "", action: null };
     const action = decision.decision === "keep" ? confirm(this.#deps, context, decision.answerId) : retire(this.#deps, context, decision.answerId);
-    return { ignored: false, alert: action.kind === "reply" ? action.text : "" };
+    return { ignored: false, alert: action.kind === "reply" ? action.text : "", action: null };
   }
 
   summary(): string {

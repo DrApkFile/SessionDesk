@@ -118,15 +118,15 @@ describe("/themes stays inside one message and names the busiest first", () => {
     const field = managerHarness();
     manyThemes(field, THEMES_SHOWN + 7);
     const said = await field.ask("/themes");
-    expect(said).toContain("and 7 more.");
-    expect(said.split("\n").filter((line) => line.includes("item(s)"))).toHaveLength(THEMES_SHOWN);
+    expect(said).toContain(`Page 1 of ${Math.ceil((THEMES_SHOWN + 7) / THEMES_SHOWN)}`);
+    expect(said.split("\n").filter((line) => line.includes("item(s)") && !line.includes("open,"))).toHaveLength(THEMES_SHOWN);
   });
 
-  it("says nothing about more when everything fits", async () => {
+  it("says nothing about pages when everything fits", async () => {
     const field = managerHarness();
     manyThemes(field, 3);
     const said = await field.ask("/themes");
-    expect(said).not.toContain("more.");
+    expect(said).not.toContain("Page 1 of");
   });
 
   it("puts the theme with the most items and most affected members first", async () => {

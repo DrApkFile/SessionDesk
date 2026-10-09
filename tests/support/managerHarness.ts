@@ -27,6 +27,7 @@ export const SETUP_CODE = "abc123xyz9";
 
 export interface ManagerHarnessOptions {
   readonly answer?: string;
+  readonly answers?: ReadonlyArray<{ readonly when: string; readonly text: string }>;
   readonly modelStatus?: number;
   readonly setupCode?: string | null;
   readonly managerKeys?: readonly string[];
@@ -49,10 +50,11 @@ export interface ManagerHarness {
 }
 
 function groqFetch(options: ManagerHarnessOptions): FetchLike {
-  return async () => {
+  return async (_url, init) => {
     const status = options.modelStatus ?? 200;
     if (status >= 400) return { ok: false, status, text: async () => "groq down" };
-    const text = options.answer ?? "Nothing is owed right now.";
+    const asked = options.answers?.find((candidate) => init.body.includes(candidate.when));
+    const text = asked?.text ?? options.answer ?? "Nothing is owed right now.";
     return { ok: true, status: 200, text: async () => JSON.stringify({ choices: [{ message: { content: text } }] }) };
   };
 }

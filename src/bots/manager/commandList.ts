@@ -6,7 +6,7 @@ export interface ManagerCommandSpec {
 
 export const MANAGER_COMMANDS: readonly ManagerCommandSpec[] = [
   { name: "owed", description: "Open promises, overdue first", argsHint: null },
-  { name: "themes", description: "What people are raising this week", argsHint: null },
+  { name: "themes", description: "What people are raising this week, open items first", argsHint: "nothing, or a page number, or all, or all and a page number" },
   { name: "helpers", description: "Who has contribution points", argsHint: null },
   { name: "member", description: "What I hold about one member", argsHint: "a name, a member code, or nothing when replying" },
   { name: "ack", description: "Tell a member the team has picked something up", argsHint: "the item id" },

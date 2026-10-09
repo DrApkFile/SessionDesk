@@ -53,6 +53,11 @@ The restore test has been run once against Walrus mainnet: evidence/restore-test
   the answer becomes community memory as unconfirmed. Nothing is posted in the group: the manager
   bot DMs every manager the question and the answer with Keep and Discard buttons, and the answer
   is reusable only after a Keep (or /confirm). If no manager can be DMed it waits in /answers.
+- /themes is built for acting on: each item is one line with a snippet of the report, its status in
+  plain words and the date, with the id under it and On it / Fixed / Won't fix buttons for the first
+  few. Open items only by default, /themes all for everything, 12 themes a page with Show more and
+  Back. Qwen groups the themes into topics for display only, and the grouping is rejected unless
+  every item it covers is exactly the items on record
 - Long replies: any reply over the chat app's limit is split at line boundaries and sent as several
   messages. A send that still fails logs the reason and tells the manager in plain words, never
   silence. /themes shows the busiest THEMES_SHOWN themes then "and N more"

@@ -1,7 +1,8 @@
 export const MANAGER_HELP = [
   "Manager commands:",
   "/owed open promises, overdue first",
-  "/themes what people are raising this week",
+  "/themes what people are raising, with each report, its status and its date. Open items only",
+  "/themes all includes fixed, verified, duplicate and won't fix. /themes 2 and /themes all 2 page through",
   "/helpers contribution points",
   "/member @name | code | reply what I hold about one member, including manager notes",
   "/ack <itemId> | /fixed <itemId> | /verify <itemId> | /reopen <itemId> change an item's status",

@@ -3,6 +3,7 @@ import type { Log } from "../shared/log.js";
 import type { BotAction, IncomingMessage } from "../shared/incoming.js";
 import { chatKindOfTelegram } from "../../platform/telegramShapes.js";
 import { ANSWER_DECISION_PREFIX } from "../shared/answerDecisions.js";
+import { ITEM_ACTION_PREFIX, THEMES_PAGE_PREFIX } from "./themeTaps.js";
 import { sendInParts } from "../shared/sending.js";
 import type { ButtonChoice } from "../../platform/platform.js";
 import { strippedTelegramText } from "../../platform/telegram/mentions.js";
@@ -71,9 +72,9 @@ export async function buildManagerBot(token: string, service: ManagerService, lo
     await send(context, await service.handle(incoming), log);
   });
 
-  bot.callbackQuery(new RegExp(`^${ANSWER_DECISION_PREFIX}`), async (context) => {
+  bot.callbackQuery(new RegExp(`^(${ANSWER_DECISION_PREFIX}|${THEMES_PAGE_PREFIX}|${ITEM_ACTION_PREFIX})`), async (context) => {
     const from = context.callbackQuery.from;
-    const outcome = service.decisionFromTap({
+    const outcome = await service.decisionFromTap({
       platform: "telegram",
       userId: String(from.id),
       chatId: String(context.chat?.id ?? from.id),
@@ -85,7 +86,9 @@ export async function buildManagerBot(token: string, service: ManagerService, lo
       await context.answerCallbackQuery();
       return;
     }
-    await context.answerCallbackQuery({ text: outcome.alert.slice(0, 190), show_alert: true });
+    if (outcome.alert.length === 0) await context.answerCallbackQuery();
+    else await context.answerCallbackQuery({ text: outcome.alert.slice(0, 190), show_alert: true });
+    if (outcome.action !== null) await send(context, outcome.action, log);
   });
 
   bot.catch((error) => {

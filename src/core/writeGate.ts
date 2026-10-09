@@ -5,7 +5,7 @@ import type { NamespaceRef } from "./namespace.js";
 import type { IdSource } from "./ports.js";
 import { guardStoredText } from "./redactor.js";
 import { refuse, ok, type Result } from "./result.js";
-import { matchTheme, themeLabelFor, type ThemeRecord } from "./themes.js";
+import { matchThemeNear, themeLabelFor, type ThemeRecord } from "./themes.js";
 import { clipStoredText } from "./text.js";
 import type { ItemKind, ItemVisibility } from "./vocabulary.js";
 
@@ -91,7 +91,7 @@ export interface ThemeChoice {
 
 export function themeFor(rawLabel: string | undefined, themes: readonly ThemeRecord[], ids: IdSource): Result<ThemeChoice> {
   const label = themeLabelFor(rawLabel);
-  const matched = matchTheme(themes, label);
+  const matched = matchThemeNear(themes, label);
   if (matched.kind === "many") return refuse("AMBIGUOUS_TARGET", `theme label ${label} matches ${matched.count} themes`);
   if (matched.kind === "one") return ok({ themeId: matched.value.themeId, created: null });
   const themeId = ids.newThemeId();
@@ -100,7 +100,7 @@ export function themeFor(rawLabel: string | undefined, themes: readonly ThemeRec
 
 function planTheme(classification: Classification, context: GateContext): Result<ThemeChoice> {
   const label = themeLabelFor(classification.themeLabel);
-  const matched = matchTheme(context.themes, label);
+  const matched = matchThemeNear(context.themes, label);
   if (matched.kind === "many") return refuse("AMBIGUOUS_TARGET", `theme label ${label} matches ${matched.count} themes`);
   if (matched.kind === "one") return ok({ themeId: matched.value.themeId, created: null });
   const themeId = context.ids.newThemeId();
