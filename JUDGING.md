@@ -35,6 +35,7 @@ changes, across a restart**. Not "the bot remembers you said hello".
 | An unconfirmed answer is never reused | Ask something matching one of the six legacy answers: you get a normal reply, and `/answers` shows it as NOT CONFIRMED with Keep and Discard buttons | `tests/unit/answerReuse.test.ts` |
 | Capture is never announced in the group | Reply to a member's question as a manager: the group sees nothing about it, and each manager gets a DM with the question, the answer and Keep / Discard | `tests/unit/answerReuse.test.ts` |
 | Two questions differing by one term are not the same question | Ask about a token, network, device or version the stored answer does not name: the bot asks which you mean and shows nothing until you say yes | `tests/unit/keyTerms.test.ts`, `tests/unit/answerReuse.test.ts` |
+| A long reply arrives, in parts | Run `/themes` or `/answers` on a busy community: a reply over 4096 characters arrives as several messages split at line boundaries, never as silence | `tests/unit/longReplies.test.ts` |
 | A vague question is not matched at all | Mention the bot with "what's <someone> fixed?": the log says `reuse_skipped` with the content-word count, and no search runs | `tests/unit/reuseQuery.test.ts` |
 | A duplicate bug is linked, not opened twice | Report something already on record: the reply gives the existing item's current status and counts you as affected | `tests/unit/answerReuse.test.ts` |
 | A promise follow-up survives a restart | `DM_ADDRESS` is restored from Walrus at boot, so a member who agreed to DMs is reachable without speaking again | `tests/unit/dmAddress.test.ts` |
@@ -194,7 +195,13 @@ when both env and events exist **env wins** — tested both ways.
   by one ticker and sit far inside any usable threshold. A semantic match must now also pass a
   key-term check in code, and a mismatch produces a question to the member rather than a guess.
   Measured against run `4bd0e04c`, all 15 paraphrases still pass the check, and that is pinned by
-  a test.
+  a test. A capitalised or `$`-prefixed short token counts as distinctive even when the word is
+  ordinary, because NEAR and LINK are both ordinary words and would otherwise have agreed.
+  **Residual risk, stated**: a lower-case ticker that is also an ordinary word and is not in the
+  eight-entry `TICKER_WORDS` list ("one", "time", "key", "gas") is not distinctive on its own.
+- **The distance threshold is not the lever for this.** It stays at 0.56: SUI and SOL differ by
+  three letters, so no threshold that keeps real paraphrases can separate them. Tightening it
+  would drop measured paraphrases and still reuse the wrong answer.
 - **A false match reached the group once**, on 2026-10-09 with the threshold at 0.72: "what's
   Kenne fixed?" drew the conflict reply, which then quoted two members' off-topic remarks back to
   the group. Four defences now stand between that message and a reply, each sufficient alone:

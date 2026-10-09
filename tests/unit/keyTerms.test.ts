@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { agreeOnKeyTerms, agreeOnReportTerms, isDistinctive, keyTermsIn } from "../../src/core/keyTerms.js";
+import { agreeOnKeyTerms, agreeOnReportTerms, isDistinctive, keyTermsIn, shouting } from "../../src/core/keyTerms.js";
 
 const MEASURED = [
   {
@@ -90,5 +90,36 @@ describe("a bug report is merged only when it names the same things", () => {
   it("merges a shorter report that names nothing the item does not", () => {
     expect(agreeOnReportTerms("I also cannot log in on android", "android login fails on 2.3").agree).toBe(true);
     expect(agreeOnReportTerms("I cannot log in either", "android login fails on 2.3").agree).toBe(true);
+  });
+});
+
+describe("a ticker is caught even when it is spelled like an ordinary word", () => {
+  it("refuses NEAR against LINK, which a word list alone let through", () => {
+    expect(agreeOnKeyTerms("how do I get testnet LINK?", "how do I get testnet NEAR?", "Use the faucet and paste your wallet.").agree).toBe(false);
+    expect(agreeOnKeyTerms("how do I get testnet link?", "how do I get testnet near?", "Use the faucet and paste your wallet.").agree).toBe(false);
+  });
+
+  it("treats a capitalised short token as distinctive even when the word is common", () => {
+    expect(isDistinctive("ONE")).toBe(true);
+    expect(isDistinctive("TIME")).toBe(true);
+    expect(isDistinctive("one")).toBe(false);
+    expect(agreeOnKeyTerms("how do I stake GAS?", "how do I stake ONE?", "Open the staking page.").agree).toBe(false);
+  });
+
+  it("reads a dollar-prefixed ticker as the ticker", () => {
+    expect(keyTermsIn("how do I buy $SUI?").map((key) => key.term)).toEqual(["sui"]);
+    expect(agreeOnKeyTerms("how do I buy $SOL?", "how do I buy $SUI?", "Use any exchange.").agree).toBe(false);
+  });
+
+  it("ignores the capital-letter rule in a message that is shouted, so no word becomes a ticker", () => {
+    expect(shouting("I CANNOT LOG IN AT ALL")).toBe(true);
+    expect(keyTermsIn("I CANNOT LOG IN AT ALL")).toEqual([]);
+    expect(agreeOnKeyTerms("I CANNOT LOG IN AT ALL", "I cannot log in", "Clear the cache and try again.").agree).toBe(true);
+  });
+
+  it("does not make the ordinary words of a support question distinctive", () => {
+    for (const surface of ["team", "send", "test", "time", "data", "work", "step", "top"]) {
+      expect(isDistinctive(surface)).toBe(false);
+    }
   });
 });

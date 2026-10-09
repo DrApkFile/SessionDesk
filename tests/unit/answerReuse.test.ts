@@ -481,3 +481,88 @@ describe("a bug report is merged into a known issue only when it names the same 
     expect(action.kind === "reply" && action.text).toContain("The team already knows about this");
   });
 });
+
+describe("key-term agreement decides which candidate is used, before the one-or-conflict rule", () => {
+  function storedAnswer(answerId: string, seq: number, question: string, answer: string): LedgerEvent {
+    return {
+      type: "ANSWER",
+      answerId,
+      questionText: question,
+      answerText: answer,
+      answeredBy: "manager",
+      themeId: "t-faucet",
+      seq,
+      ts: "2026-10-07T09:00:00.000Z",
+      confirmed: true,
+    } as const satisfies LedgerEvent;
+  }
+
+  async function fieldWithTwoAnswers(distance: number): Promise<Harness> {
+    const field = harness({ classification: '{"kind":"other"}' });
+    const sui = storedAnswer("a-sui", 320, "how do I get testnet SUI?", "Open the SUI faucet and paste your wallet.");
+    const sol = storedAnswer("a-sol", 321, "how do I get testnet SOL?", "Run the Solana airdrop command.");
+    for (const event of [sui, sol]) {
+      field.cache.record({ seq: event.seq, namespace: ANSWERS_NAMESPACE, memberH: null, event, state: "saved", blobId: `b${event.seq}`, code: null });
+    }
+    field.memory.configure({
+      searchHits: new Map([
+        [
+          ANSWERS_NAMESPACE,
+          [
+            { text: storedLine(sui), blobId: "b320", distance },
+            { text: storedLine(sol), blobId: "b321", distance: distance + 0.01 },
+          ],
+        ],
+      ]),
+    });
+    field.classifyAs('{"kind":"question","themeLabel":"faucet"}');
+    consent(field, MEMBER);
+    return field;
+  }
+
+  it("uses the one answer whose key terms agree, rather than calling it a conflict", async () => {
+    const field = await fieldWithTwoAnswers(0.2);
+    const action = await field.service.handle(field.message({ userId: MEMBER, chatId: MEMBER, chatType: "private", messageId: 150, text: "how do I get testnet SOL?" }));
+    const said = action.kind === "reply" ? action.text : "";
+    expect(said).toContain("This came up before");
+    expect(said).toContain("Solana airdrop");
+    expect(said).not.toContain("SUI faucet");
+    expect(field.managerNotices).toHaveLength(0);
+  });
+
+  it("asks which one when neither candidate agrees, and tells no manager there is a conflict", async () => {
+    const field = await fieldWithTwoAnswers(0.2);
+    const action = await field.service.handle(field.message({ userId: MEMBER, chatId: MEMBER, chatType: "private", messageId: 151, text: "how do I get testnet USDC?" }));
+    const said = action.kind === "reply" ? action.text : "";
+    expect(said).toContain("are you asking about USDC");
+    expect(said).not.toContain("faucet");
+    expect(said).not.toContain("airdrop");
+    expect(field.managerNotices).toHaveLength(0);
+    expect(field.logLines.join("\n")).toContain("decision=unclear");
+  });
+
+  it("still reports a real conflict when two answers agree on the same terms", async () => {
+    const field = harness({ classification: '{"kind":"other"}' });
+    const first = storedAnswer("a-one", 330, "how do I reset my password?", "Open Settings, then Account, then Reset.");
+    const second = storedAnswer("a-two", 331, "how do I change my password?", "Use the Reset link on the sign-in screen.");
+    for (const event of [first, second]) {
+      field.cache.record({ seq: event.seq, namespace: ANSWERS_NAMESPACE, memberH: null, event, state: "saved", blobId: `b${event.seq}`, code: null });
+    }
+    field.memory.configure({
+      searchHits: new Map([
+        [
+          ANSWERS_NAMESPACE,
+          [
+            { text: storedLine(first), blobId: "b330", distance: 0.2 },
+            { text: storedLine(second), blobId: "b331", distance: 0.21 },
+          ],
+        ],
+      ]),
+    });
+    field.classifyAs('{"kind":"question","themeLabel":"passwords"}');
+    consent(field, MEMBER);
+    const action = await field.service.handle(field.message({ userId: MEMBER, chatId: MEMBER, chatType: "private", messageId: 152, text: "how do I reset my password?" }));
+    expect(action.kind === "reply" && action.text).toBe(CONFLICTING_ANSWERS_REPLY);
+    expect(field.managerNotices).toHaveLength(1);
+  });
+});

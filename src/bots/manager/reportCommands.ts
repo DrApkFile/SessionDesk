@@ -1,9 +1,9 @@
 import { buildFactsSheet } from "../../core/factsSheet.js";
 import { ERRORS } from "../../core/errors.js";
 import { reply, type BotAction } from "../shared/incoming.js";
-import { THEME_WINDOW_DAYS } from "../../core/tuning.js";
+import { THEMES_SHOWN, THEME_WINDOW_DAYS } from "../../core/tuning.js";
 import type { ManagerContext, ManagerDeps } from "./deps.js";
-import { recentThemes, topHelpers } from "./summary.js";
+import { affectedIn, recentThemes, topHelpers } from "./summary.js";
 import { buildWeeklyFacts } from "./weekly.js";
 import { reportPrompt } from "../../models/prompts.js";
 import { reviewReply } from "../../core/replyGuard.js";
@@ -13,12 +13,15 @@ export function themes(deps: ManagerDeps): BotAction {
   const found = recentThemes(deps.cache.state(), deps.clock.now());
   if (found.length === 0) return reply(`No themes in the last ${THEME_WINDOW_DAYS} days.`);
   const state = deps.cache.state();
-  const affectedIn = (itemIds: readonly string[]): number => itemIds.reduce((total, itemId) => total + (state.items.get(itemId)?.affected ?? 0), 0);
-  const lines = found.map(
-    (theme) =>
-      `${theme.label}: ${theme.itemIds.length} item(s), ${theme.questionCount} question(s), ${affectedIn(theme.itemIds)} extra member(s) affected${theme.itemIds.length === 0 ? "" : ` [${theme.itemIds.join(" ")}]`}`,
-  );
-  return reply([`Themes in the last ${THEME_WINDOW_DAYS} days, busiest first:`, ...lines].join("\n"));
+  const shown = found.slice(0, THEMES_SHOWN);
+  const lines = shown.flatMap((theme) => {
+    const affected = affectedIn(state, theme.itemIds);
+    const head = `${theme.label}: ${theme.itemIds.length} item(s), ${theme.questionCount} question(s), ${affected} extra member(s) affected`;
+    return theme.itemIds.length === 0 ? [head] : [head, `   ${theme.itemIds.join(" ")}`];
+  });
+  const more = found.length - shown.length;
+  const tail = more <= 0 ? [] : [`and ${more} more.`];
+  return reply([`Themes in the last ${THEME_WINDOW_DAYS} days, busiest first:`, ...lines, ...tail].join("\n"));
 }
 
 export function helpers(deps: ManagerDeps): BotAction {

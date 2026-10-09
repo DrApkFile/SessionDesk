@@ -20,6 +20,8 @@ import type { MemberService } from "../../bots/member/service.js";
 import { CONSENT_PREFIX } from "../../bots/member/telegram.js";
 import { dmStartLink, CONSENT_SCOPES, type ConsentScope } from "../../bots/member/notices.js";
 import type { Log } from "../../bots/shared/log.js";
+import { sendInParts } from "../../bots/shared/sending.js";
+import { DISCORD_MESSAGE_LIMIT } from "../../core/tuning.js";
 import { PollingSupervisor, type Pollable } from "../../bots/shared/polling.js";
 import type { IncomingMessage, BotAction } from "../../bots/shared/incoming.js";
 import type { Clock, Sleep } from "../../core/ports.js";
@@ -76,10 +78,20 @@ async function deliver(message: Message, action: BotAction, botUsername: string,
     log.say("channel_not_sendable", { channel: message.channelId });
     return;
   }
-  const sent = await message.channel.send(
-    action.offerConsent ? { content: action.text, components: [consentRow(botUsername)] } : { content: action.text },
+  const channel = message.channel;
+  let last: Message | null = null;
+  await sendInParts(
+    action.text,
+    async (part, index, total) => {
+      const final = index === total - 1;
+      last = await channel.send(action.offerConsent && final ? { content: part, components: [consentRow(botUsername)] } : { content: part });
+    },
+    log,
+    "discord",
+    DISCORD_MESSAGE_LIMIT,
   );
-  if (action.pin !== true) return;
+  if (action.pin !== true || last === null) return;
+  const sent: Message = last;
   try {
     await sent.pin();
     log.say("optin_pinned", { channel: sent.channelId });
@@ -145,11 +157,15 @@ export async function startDiscord(start: DiscordStart): Promise<PlatformRuntime
     supervisors: [supervisor],
     toManager: async (userId, text) => {
       const user = await client.users.fetch(userId);
-      await user.send(text);
+      await sendInParts(text, async (part) => {
+        await user.send(part);
+      }, log, "discord_dm", DISCORD_MESSAGE_LIMIT);
     },
     toMember: async (userId, text) => {
       const user = await client.users.fetch(userId);
-      await user.send(text);
+      await sendInParts(text, async (part) => {
+        await user.send(part);
+      }, log, "discord_dm", DISCORD_MESSAGE_LIMIT);
     },
     detail: { channelId: start.settings.channelId, managers: start.settings.managerIds.length },
     stop: async () => {

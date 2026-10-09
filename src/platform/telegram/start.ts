@@ -9,6 +9,7 @@ import type { CommunityChat, BotHandle } from "../../bots/shared/startup.js";
 import type { Clock, Sleep } from "../../core/ports.js";
 import type { TelegramSettings } from "../../config.js";
 import type { PlatformRuntime } from "../runtime.js";
+import { sendInParts } from "../../bots/shared/sending.js";
 
 export interface TelegramStart {
   readonly settings: TelegramSettings;
@@ -68,10 +69,20 @@ export async function startTelegram(start: TelegramStart): Promise<PlatformRunti
     supervisors,
     toManager: async (chatId, text, choices) => {
       const keyboard = choices === undefined || choices.length === 0 ? undefined : choices.reduce((built, choice) => built.text(choice.label, choice.callback), new InlineKeyboard());
-      await managerBot.bot.api.sendMessage(chatId, text, keyboard === undefined ? undefined : { reply_markup: keyboard });
+      await sendInParts(
+        text,
+        async (part, index, total) => {
+          const last = index === total - 1;
+          await managerBot.bot.api.sendMessage(chatId, part, keyboard === undefined || !last ? undefined : { reply_markup: keyboard });
+        },
+        start.log.child("manager"),
+        "manager_dm",
+      );
     },
     toMember: async (chatId, text) => {
-      await memberBot.bot.api.sendMessage(chatId, text);
+      await sendInParts(text, async (part) => {
+        await memberBot.bot.api.sendMessage(chatId, part);
+      }, start.log.child("member"), "member_dm");
     },
     detail: { memberBot: memberBot.identity.username, managerBot: managerBot.username, communityChatId: start.settings.communityChatId },
     stop: async () => {

@@ -45,6 +45,10 @@ export const DEFAULT_PORT = 3000;
 export const ANSWER_MAX_DISTANCE = 0.56;
 export const MIN_REUSE_CONTENT_WORDS = 2;
 export const PENDING_ANSWERS_OFFERED = 5;
+export const TELEGRAM_MESSAGE_LIMIT = 4096;
+export const DISCORD_MESSAGE_LIMIT = 2000;
+export const SLACK_MESSAGE_LIMIT = 3000;
+export const THEMES_SHOWN = 12;
 export const ANSWER_SEARCH_LIMIT = 5;
 export const KNOWN_ISSUE_MAX_DISTANCE = 0.5;
 export const KNOWN_ISSUE_SEARCH_LIMIT = 5;
@@ -55,6 +59,8 @@ export const ANSWER_FEEDBACK_WINDOW_MINUTES = 30;
 export const MYDATA_TEXT_CHARS = 160;
 
 export const NETWORK_NAMES = ["mainnet", "testnet", "devnet", "localnet", "staging", "sandbox", "prod", "production"] as const;
+
+export const TICKER_WORDS = ["near","link","dot","ton","arb","apt","trx","op"] as const;
 
 export const DEVICE_NAMES = ["android", "ios", "iphone", "ipad", "windows", "macos", "mac", "linux", "web", "desktop", "mobile", "tablet", "chrome", "safari", "firefox", "edge"] as const;
 
@@ -78,7 +84,7 @@ export const COMMON_WORDS = [
   "question","questions","quick",
   "rather","read","ready","real","really","reason","receive","received","refund","register","remove","removed","reply","report","reported","request","reset","rest","right","run","running",
   "same","save","saved","say","says","screen","simply","somehow","supported","supporting","supports","second","see","seen","select","send","sent","service","set","setting","settings","share","shared","should","show","shows","side","sign","signal","signin","signup","since","site","slow","so","some","somebody","someone","something","soon","sorry","sort","start","started","state","status","stay","step","still","stop","stopped","such","support","sure","switch","sync","syncs","system",
-  "take","takes","team","tell","token","tokens","than","thank","thanks","that","the","their","them","then","there","these","they","thing","things","think","this","those","though","three","through","time","times","to","today","told","too","took","top","total","transfer","try","trying","turn","two","type",
+  "take","takes","team","tell","test","tested","testing","token","tokens","than","thank","thanks","that","the","their","them","then","there","these","they","thing","things","think","this","those","though","three","through","time","times","to","today","told","too","took","top","total","transfer","try","trying","turn","two","type",
   "under","understand","until","up","update","updated","upgrade","upgraded","upload","us","use","used","user","users","using","usually",
   "value","version","very","via","view",
   "wait","waiting","wallet","wallets","want","wanted","was","way","we","week","weeks","well","went","were","what","whatever","when","where","whether","which","while","who","why","will","with","within","without","wont","word","work","worked","working","works","workspace","would","write","wrong",

@@ -80,3 +80,21 @@ describe("the member bot cannot reach a manager note through the cache", () => {
     expect([...field.community.stored.keys()]).toEqual([]);
   });
 });
+
+describe("member content is never handed to a markup parser", () => {
+  it("asks for no parse mode anywhere a message is sent", () => {
+    const offenders = [...sourceFiles("src/bots"), ...sourceFiles("src/platform")].filter((path) => /parse_mode|parseMode/.test(readFileSync(path, "utf8")));
+    expect(offenders).toEqual([]);
+  });
+
+  it("sends every reply through the splitter, so no adapter calls the chat app with a whole reply", () => {
+    const adapters = ["src/bots/member/telegram.ts", "src/bots/manager/telegram.ts", "src/platform/telegram/start.ts"];
+    for (const path of adapters) {
+      const source = readFileSync(path, "utf8");
+      expect(source).toContain("sendInParts");
+      expect(source).not.toMatch(/sendMessage\([^)]*action\.text/);
+      expect(source).not.toMatch(/context\.reply\(action\.text/);
+    }
+  });
+});
+

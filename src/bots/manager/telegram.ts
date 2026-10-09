@@ -3,6 +3,7 @@ import type { Log } from "../shared/log.js";
 import type { BotAction, IncomingMessage } from "../shared/incoming.js";
 import { chatKindOfTelegram } from "../../platform/telegramShapes.js";
 import { ANSWER_DECISION_PREFIX } from "../shared/answerDecisions.js";
+import { sendInParts } from "../shared/sending.js";
 import type { ButtonChoice } from "../../platform/platform.js";
 import { strippedTelegramText } from "../../platform/telegram/mentions.js";
 import type { ManagerService } from "./service.js";
@@ -40,10 +41,18 @@ export function keyboardFor(choices: readonly ButtonChoice[]): InlineKeyboard | 
   return choices.reduce((built, choice, index) => (index % 2 === 0 && index > 0 ? built.row() : built).text(choice.label, choice.callback), new InlineKeyboard());
 }
 
-async function send(context: Context, action: BotAction): Promise<void> {
+async function send(context: Context, action: BotAction, log: Log): Promise<void> {
   if (action.kind === "silent") return;
   const keyboard = keyboardFor(action.choices ?? []);
-  await context.reply(action.text, keyboard === undefined ? undefined : { reply_markup: keyboard });
+  await sendInParts(
+    action.text,
+    async (part, index, total) => {
+      const last = index === total - 1;
+      await context.reply(part, keyboard === undefined || !last ? undefined : { reply_markup: keyboard });
+    },
+    log,
+    "manager",
+  );
 }
 
 export interface ManagerBot {
@@ -59,7 +68,7 @@ export async function buildManagerBot(token: string, service: ManagerService, lo
   bot.on("message", async (context) => {
     const incoming = toManagerIncoming(context, me.username);
     if (incoming === null) return;
-    await send(context, await service.handle(incoming));
+    await send(context, await service.handle(incoming), log);
   });
 
   bot.callbackQuery(new RegExp(`^${ANSWER_DECISION_PREFIX}`), async (context) => {

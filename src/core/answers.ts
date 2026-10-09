@@ -61,12 +61,18 @@ export function lookUpAnswer(
     })
     .filter((candidate): candidate is AnswerMatch => candidate !== null);
   const unique = [...new Map(candidates.map((candidate) => [candidate.answer.answerId, candidate])).values()].sort((left, right) => left.distance - right.distance);
-  const matched = onlyMatch(unique, () => true);
-  if (matched.kind === "none") return { kind: "none", candidates: 0 };
-  if (matched.kind === "many") return { kind: "conflicting", matches: unique };
-  const agreement = agreeOnKeyTerms(question, matched.value.answer.questionText, matched.value.answer.answerText);
-  if (!agreement.agree) return { kind: "unclear", match: matched.value, agreement };
-  return { kind: "one", match: matched.value };
+  if (unique.length === 0) return { kind: "none", candidates: 0 };
+  const judged = unique.map((candidate) => ({
+    candidate,
+    agreement: agreeOnKeyTerms(question, candidate.answer.questionText, candidate.answer.answerText),
+  }));
+  const agreeing = judged.filter((judgement) => judgement.agreement.agree);
+  const matched = onlyMatch(agreeing, () => true);
+  if (matched.kind === "many") return { kind: "conflicting", matches: agreeing.map((judgement) => judgement.candidate) };
+  if (matched.kind === "one") return { kind: "one", match: matched.value.candidate };
+  const nearest = judged[0];
+  if (nearest === undefined) return { kind: "none", candidates: 0 };
+  return { kind: "unclear", match: nearest.candidate, agreement: nearest.agreement };
 }
 
 export function matchAnswer(

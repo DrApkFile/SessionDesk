@@ -12,11 +12,19 @@ export function openPromises(state: CommunityState, now: Date): readonly Promise
   return [...state.promises.values()].filter((promise) => promise.state === "open").sort((left, right) => byDueThenOverdueFirst(left, right, now));
 }
 
+export function affectedIn(state: CommunityState, itemIds: readonly string[]): number {
+  return itemIds.reduce((total, itemId) => total + (state.items.get(itemId)?.affected ?? 0), 0);
+}
+
+function busyness(state: CommunityState, theme: ThemeFacts): number {
+  return theme.itemIds.length * 10 + affectedIn(state, theme.itemIds) * 5 + theme.questionCount;
+}
+
 export function recentThemes(state: CommunityState, now: Date, windowDays: number = THEME_WINDOW_DAYS): readonly ThemeFacts[] {
   const today = dayOf(now);
   return [...state.themes.values()]
     .filter((theme) => daysBetween(theme.createdTs.slice(0, 10), today) <= windowDays)
-    .sort((left, right) => right.itemIds.length + right.questionCount - (left.itemIds.length + left.questionCount));
+    .sort((left, right) => busyness(state, right) - busyness(state, left));
 }
 
 export function topHelpers(state: CommunityState, windowDays: number = HELPERS_WINDOW_DAYS): ReadonlyArray<{ memberH: string; points: number }> {

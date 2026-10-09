@@ -1,8 +1,8 @@
-import { COMMON_WORDS, DEVICE_NAMES, NETWORK_NAMES } from "./tuning.js";
+import { COMMON_WORDS, DEVICE_NAMES, NETWORK_NAMES, TICKER_WORDS } from "./tuning.js";
 import { expandedContractions } from "./reuseQuery.js";
 
 const COMMON = new Set<string>(COMMON_WORDS);
-const NAMED = new Set<string>([...NETWORK_NAMES, ...DEVICE_NAMES]);
+const NAMED = new Set<string>([...NETWORK_NAMES, ...DEVICE_NAMES, ...TICKER_WORDS]);
 const VERSION_SHAPE = /^\d+(?:\.\d+)+$/;
 const NUMBER_SHAPE = /^\d+$/;
 
@@ -11,21 +11,28 @@ export interface KeyTerm {
   readonly surface: string;
 }
 
+const TICKER_SHAPE = /^\$?[A-Z][A-Z0-9]{1,5}$/;
+
+export function shouting(text: string): boolean {
+  return !/[a-z]/.test(text);
+}
+
 function surfacesOf(text: string): readonly string[] {
   return expandedContractions(text)
-    .replace(/[^A-Za-z0-9.\-_ ]/g, " ")
+    .replace(/[^A-Za-z0-9.$\-_ ]/g, " ")
     .split(/[\s\-_]+/)
     .map((word) => word.replace(/^\.+|\.+$/g, ""))
     .filter((word) => word.length > 0);
 }
 
 function normalised(surface: string): string {
-  const lowered = surface.toLowerCase();
+  const lowered = surface.replace(/^\$/, "").toLowerCase();
   const unversioned = lowered.replace(/^v(?=\d)/, "");
   return VERSION_SHAPE.test(unversioned) ? unversioned : lowered;
 }
 
-export function isDistinctive(surface: string): boolean {
+export function isDistinctive(surface: string, inShoutedText = false): boolean {
+  if (!inShoutedText && TICKER_SHAPE.test(surface)) return true;
   const term = normalised(surface);
   if (VERSION_SHAPE.test(term) || NUMBER_SHAPE.test(term)) return true;
   if (NAMED.has(term)) return true;
@@ -36,8 +43,9 @@ export function isDistinctive(surface: string): boolean {
 
 export function keyTermsIn(text: string): readonly KeyTerm[] {
   const found = new Map<string, KeyTerm>();
+  const inShoutedText = shouting(text);
   for (const surface of surfacesOf(text)) {
-    if (!isDistinctive(surface)) continue;
+    if (!isDistinctive(surface, inShoutedText)) continue;
     const term = normalised(surface);
     if (!found.has(term)) found.set(term, { term, surface });
   }

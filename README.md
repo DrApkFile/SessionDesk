@@ -53,6 +53,9 @@ The restore test has been run once against Walrus mainnet: evidence/restore-test
   the answer becomes community memory as unconfirmed. Nothing is posted in the group: the manager
   bot DMs every manager the question and the answer with Keep and Discard buttons, and the answer
   is reusable only after a Keep (or /confirm). If no manager can be DMed it waits in /answers.
+- Long replies: any reply over the chat app's limit is split at line boundaries and sent as several
+  messages. A send that still fails logs the reason and tells the manager in plain words, never
+  silence. /themes shows the busiest THEMES_SHOWN themes then "and N more"
 - Key-term agreement: a semantic match is reused only when both questions name the same
   distinctive things - tickers, networks, devices, versions, and any word the common-word list in
   src/core/tuning.ts does not hold. "testnet SUI" and "testnet SOL" are not the same question, so

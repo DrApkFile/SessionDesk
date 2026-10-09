@@ -5,6 +5,7 @@ import type { IncomingMessage, MemberAction } from "../shared/incoming.js";
 import { chatKindOfTelegram } from "../../platform/telegramShapes.js";
 import { strippedTelegramText } from "../../platform/telegram/mentions.js";
 import { CONSENT_SCOPES, dmStartLink, type ConsentScope } from "./notices.js";
+import { sendInParts } from "../shared/sending.js";
 import type { MemberService } from "./service.js";
 
 export const CONSENT_PREFIX = "consent:";
@@ -54,15 +55,24 @@ export function toIncoming(context: Context, identity: BotIdentity): IncomingMes
 
 async function send(context: Context, action: MemberAction, self: BotHandle, log: Log): Promise<void> {
   if (action.kind === "silent") return;
-  const sent = action.offerConsent
-    ? await context.reply(action.text, { reply_markup: consentKeyboard(self.username) })
-    : await context.reply(action.text);
-  if (action.pin !== true) return;
+  let pinnable: { chatId: number; messageId: number } | null = null;
+  await sendInParts(
+    action.text,
+    async (part, index, total) => {
+      const last = index === total - 1;
+      const sent = await context.reply(part, action.offerConsent && last ? { reply_markup: consentKeyboard(self.username) } : undefined);
+      if (last) pinnable = { chatId: sent.chat.id, messageId: sent.message_id };
+    },
+    log,
+    "member",
+  );
+  if (action.pin !== true || pinnable === null) return;
+  const { chatId, messageId } = pinnable;
   try {
-    await context.api.pinChatMessage(sent.chat.id, sent.message_id, { disable_notification: true });
-    log.say("optin_pinned", { chat: String(sent.chat.id) });
+    await context.api.pinChatMessage(chatId, messageId, { disable_notification: true });
+    log.say("optin_pinned", { chat: String(chatId) });
   } catch (error) {
-    log.say("optin_pin_failed", { chat: String(sent.chat.id), detail: String(error instanceof Error ? error.message : error).slice(0, 160) });
+    log.say("optin_pin_failed", { chat: String(chatId), detail: String(error instanceof Error ? error.message : error).slice(0, 160) });
   }
 }
 

@@ -6,6 +6,8 @@ import { CONSENT_PREFIX } from "../../bots/member/telegram.js";
 import { CONSENT_SCOPES, dmStartLink, type ConsentScope } from "../../bots/member/notices.js";
 import type { BotAction, IncomingMessage } from "../../bots/shared/incoming.js";
 import type { Log } from "../../bots/shared/log.js";
+import { sendInParts } from "../../bots/shared/sending.js";
+import { SLACK_MESSAGE_LIMIT } from "../../core/tuning.js";
 import { PollingSupervisor, type Pollable } from "../../bots/shared/polling.js";
 import type { Clock, Sleep } from "../../core/ports.js";
 import type { PlatformRuntime } from "../runtime.js";
@@ -93,11 +95,23 @@ export async function startSlack(start: SlackStart): Promise<PlatformRuntime> {
 
   const deliver = async (channel: string, action: BotAction): Promise<void> => {
     if (action.kind === "silent") return;
-    const posted = await app.client.chat.postMessage(
-      action.offerConsent
-        ? { channel, text: action.text, blocks: consentBlocks(action.text, botUsername) as never }
-        : { channel, text: action.text },
+    let lastTs: string | null = null;
+    await sendInParts(
+      action.text,
+      async (part, index, total) => {
+        const final = index === total - 1;
+        const posted = await app.client.chat.postMessage(
+          action.offerConsent && final
+            ? { channel, text: part, blocks: consentBlocks(part, botUsername) as never }
+            : { channel, text: part },
+        );
+        if (final && typeof posted.ts === "string") lastTs = posted.ts;
+      },
+      log,
+      "slack",
+      SLACK_MESSAGE_LIMIT,
     );
+    const posted = { ts: lastTs };
     if (action.pin !== true || typeof posted.ts !== "string") return;
     try {
       await app.client.pins.add({ channel, timestamp: posted.ts });
@@ -166,10 +180,14 @@ export async function startSlack(start: SlackStart): Promise<PlatformRuntime> {
     platform: "slack",
     supervisors: [new PollingSupervisor(pollable, start.sleep, start.clock, log)],
     toManager: async (userId, text) => {
-      await app.client.chat.postMessage({ channel: userId, text });
+      await sendInParts(text, async (part) => {
+        await app.client.chat.postMessage({ channel: userId, text: part });
+      }, log, "slack_dm", SLACK_MESSAGE_LIMIT);
     },
     toMember: async (userId, text) => {
-      await app.client.chat.postMessage({ channel: userId, text });
+      await sendInParts(text, async (part) => {
+        await app.client.chat.postMessage({ channel: userId, text: part });
+      }, log, "slack_dm", SLACK_MESSAGE_LIMIT);
     },
     detail: { channelId: start.settings.channelId, managers: start.settings.managerIds.length },
     stop: async () => {
