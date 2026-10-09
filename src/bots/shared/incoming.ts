@@ -1,4 +1,4 @@
-import { isDirect, type ChatKind, type PlatformAction, type PlatformMessage } from "../../platform/platform.js";
+import { isDirect, type ButtonChoice, type ChatKind, type PlatformAction, type PlatformMessage } from "../../platform/platform.js";
 
 export type IncomingMessage = PlatformMessage;
 export type BotAction = PlatformAction;
@@ -11,6 +11,10 @@ export function silent(reason: string): BotAction {
 
 export function reply(text: string, offerConsent = false): BotAction {
   return { kind: "reply", text, offerConsent };
+}
+
+export function replyWithChoices(text: string, choices: readonly ButtonChoice[]): BotAction {
+  return choices.length === 0 ? { kind: "reply", text, offerConsent: false } : { kind: "reply", text, offerConsent: false, choices };
 }
 
 export function pinnedNotice(text: string): BotAction {

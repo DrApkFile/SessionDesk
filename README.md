@@ -50,8 +50,9 @@ The restore test has been run once against Walrus mainnet: evidence/restore-test
   they agreed to DMs, saying honestly that it is still open and the team has been reminded. A
   DM_ADDRESS line in the member's own namespace keeps them reachable across restarts
 - Community answers: when a manager answers a member's question, or a member's reply is thanked,
-  the answer becomes community memory. A manager confirms it with /confirm before it is ever
-  reused, so an answer nobody has vouched for stays inert. The next person to ask gets the
+  the answer becomes community memory as unconfirmed. Nothing is posted in the group: the manager
+  bot DMs every manager the question and the answer with Keep and Discard buttons, and the answer
+  is reusable only after a Keep (or /confirm). If no manager can be DMed it waits in /answers. The next person to ask gets the
   confirmed answer, who gave it, the date and a Walruscan receipt, but only when exactly one
   answer is close enough and the question carries at least two words of its own.
   /answers lists them with whether each is confirmed, /retire stops one being reused

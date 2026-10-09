@@ -32,7 +32,8 @@ changes, across a restart**. Not "the bot remembers you said hello".
 | Ownership cannot be taken | A second `OWNER_SET`, a manager change not signed by the owner, and a `COMMUNITY_SET` from a non-manager are all rejected by the resolver, not just by the command layer | `tests/unit/selfSetup.test.ts` |
 | A member can opt in without leaving the group | A manager runs `/optin`; the pinned notice has **I agree** and **I agree + DMs**. One tap records consent under that member's namespace hash, a second tap writes nothing | `tests/unit/groupOptin.test.ts` |
 | An earlier answer is reused instead of re-answered | `/confirm` the answer in the manager bot first, then ask the question again: the reply names who answered, the date and a Walruscan receipt, and asks "did this help?" | `tests/unit/answerReuse.test.ts`, `/answers` |
-| An unconfirmed answer is never reused | Ask something matching one of the six legacy answers: you get a normal reply, and `/answers` shows it as NOT CONFIRMED | `tests/unit/answerReuse.test.ts` |
+| An unconfirmed answer is never reused | Ask something matching one of the six legacy answers: you get a normal reply, and `/answers` shows it as NOT CONFIRMED with Keep and Discard buttons | `tests/unit/answerReuse.test.ts` |
+| Capture is never announced in the group | Reply to a member's question as a manager: the group sees nothing about it, and each manager gets a DM with the question, the answer and Keep / Discard | `tests/unit/answerReuse.test.ts` |
 | A vague question is not matched at all | Mention the bot with "what's <someone> fixed?": the log says `reuse_skipped` with the content-word count, and no search runs | `tests/unit/reuseQuery.test.ts` |
 | A duplicate bug is linked, not opened twice | Report something already on record: the reply gives the existing item's current status and counts you as affected | `tests/unit/answerReuse.test.ts` |
 | A promise follow-up survives a restart | `DM_ADDRESS` is restored from Walrus at boot, so a member who agreed to DMs is reachable without speaking again | `tests/unit/dmAddress.test.ts` |
@@ -178,6 +179,10 @@ when both env and events exist **env wins** — tested both ways.
   swallows a real report while a wrong answer reuse is recoverable.
 - **The storage format change is an improvement, not the fix.** Both formats ranked the right
   answer first in 15 of 15 paraphrases; natural language widened the gap from 0.134 to 0.193.
+- **Confirmation happens in a manager DM, never in the group.** Until 2026-10-09 the member bot
+  asked "Should I reuse that answer?" in the community chat, which quoted a member's question and a
+  manager's reply back to everyone. There is no group fallback now: if no manager can be DMed, the
+  answer stays unconfirmed in `/answers` and nothing is posted.
 - **Nothing on mainnet is reusable today.** An answer is reused only in state `active`, and an
   `ANSWER` line without the `confirmed` flag — which is every line written before 2026-10-09 —
   decodes as `pending`. The six junk answers already there ("she no call me o", a question that was

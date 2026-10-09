@@ -3,6 +3,7 @@ import { encode } from "../../src/core/codec.js";
 import { ANSWER_MAX_DISTANCE, KNOWN_ISSUE_MAX_DISTANCE, MIN_REUSE_CONTENT_WORDS } from "../../src/core/tuning.js";
 import { CONFLICTING_ANSWERS_REPLY } from "../../src/bots/member/reuse.js";
 import { GROUP_CHAT_ID, MANAGER_ID, harness, type Harness } from "../support/memberHarness.js";
+import type { MemberAction } from "../../src/bots/shared/incoming.js";
 import { reuseQueryOf } from "../../src/core/reuseQuery.js";
 import { storedLine } from "../../src/core/searchableLine.js";
 import type { LedgerEvent } from "../../src/core/events.js";
@@ -16,25 +17,45 @@ function consent(field: Harness, userId: number): void {
   field.service.recordConsent(userId, userId, 1, "storage");
 }
 
-async function managerAnswers(field: Harness, question: string, answer: string, messageId = 10): Promise<void> {
+async function managerAnswers(field: Harness, question: string, answer: string, messageId = 10): Promise<MemberAction> {
   consent(field, MANAGER_ID);
-  const proposed = await field.service.handle(
-    field.message({ userId: MANAGER_ID, userName: "boss", messageId, text: answer, replyToUserId: MEMBER, replyToText: question, mentionsBot: true }),
+  const action = await field.service.handle(
+    field.message({ userId: MANAGER_ID, userName: "boss", messageId, text: answer, replyToUserId: MEMBER, replyToText: question }),
   );
-  if (proposed.kind === "reply" && proposed.text.includes("Should I reuse")) {
-    await field.service.handle(field.message({ userId: MANAGER_ID, userName: "boss", messageId: messageId + 500, text: "yes", mentionsBot: true }));
-  }
   await field.queue.settled();
+  return action;
+}
+
+function managersKeep(field: Harness): readonly string[] {
+  const pending = [...field.cache.state().answers.values()].filter((answer) => answer.state === "pending");
+  let seq = 900;
+  for (const answer of pending) {
+    seq += 1;
+    field.cache.record({
+      seq,
+      namespace: ANSWERS_NAMESPACE,
+      memberH: null,
+      event: { type: "ANSWER_CONFIRMED", answerId: answer.answerId, byManagerId: String(MANAGER_ID), seq, ts: "2026-10-09T11:00:00.000Z" },
+      state: "saved",
+      blobId: `bkeep${seq}`,
+      code: null,
+    });
+  }
+  return pending.map((answer) => answer.answerId);
 }
 
 describe("an answer given in the group becomes community memory", () => {
   it("stores an ANSWER when a manager replies to a member's question", async () => {
     const field = harness({ classification: '{"kind":"other"}' });
-    await managerAnswers(field, "how do I reset my password?", "Open settings, then Account, then Reset.");
+    const action = await managerAnswers(field, "how do I reset my password?", "Open settings, then Account, then Reset.");
     const answers = [...field.cache.state().answers.values()];
     expect(answers).toHaveLength(1);
-    expect(answers[0]).toMatchObject({ answeredBy: "manager", state: "active", questionText: "how do I reset my password?", answerText: "Open settings, then Account, then Reset." });
+    expect(answers[0]).toMatchObject({ answeredBy: "manager", state: "pending", questionText: "how do I reset my password?", answerText: "Open settings, then Account, then Reset." });
     expect(field.memory.stored.get(ANSWERS_NAMESPACE)).toHaveLength(1);
+    expect(action.kind).toBe("silent");
+    expect(field.managerNotices).toHaveLength(1);
+    expect(field.managerNotices[0]?.text).toContain("Should I reuse that answer");
+    expect(field.managerNotices[0]?.choices.map((choice) => choice.label)).toEqual(["Keep", "Discard"]);
   });
 
   it("stores nothing when there is no real question and no real answer", async () => {
@@ -50,17 +71,37 @@ describe("an answer given in the group becomes community memory", () => {
     expect(field.cache.state().answers.size).toBe(1);
   });
 
-  it("asks the manager to confirm before keeping an answer, and forgets it on no", async () => {
-    const field = harness({ classification: '{"kind":"other"}' });
-    consent(field, MANAGER_ID);
-    const proposed = await field.service.handle(
-      field.message({ userId: MANAGER_ID, messageId: 60, text: "Open Settings, then Account, then Reset.", replyToUserId: MEMBER, replyToText: "how do I reset my password?", mentionsBot: true }),
-    );
-    expect(proposed.kind === "reply" && proposed.text).toContain("Should I reuse that answer");
-    expect(field.cache.state().answers.size).toBe(0);
-    const declined = await field.service.handle(field.message({ userId: MANAGER_ID, messageId: 61, text: "no", mentionsBot: true }));
-    expect(declined.kind === "reply" && declined.text).toContain("Forgotten");
-    expect(field.cache.state().answers.size).toBe(0);
+  it("posts nothing in the community chat, whether or not the manager mentioned the bot", async () => {
+    for (const mentionsBot of [false, true]) {
+      const field = harness({ classification: '{"kind":"other"}' });
+      consent(field, MANAGER_ID);
+      const action = await field.service.handle(
+        field.message({
+          userId: MANAGER_ID,
+          chatId: GROUP_CHAT_ID,
+          chatType: "supergroup",
+          messageId: 60,
+          text: "Open Settings, then Account, then Reset.",
+          replyToUserId: MEMBER,
+          replyToText: "how do I reset my password?",
+          mentionsBot,
+        }),
+      );
+      const said = action.kind === "reply" ? action.text : "";
+      expect(said).not.toContain("Should I reuse");
+      expect(said).not.toContain("Reply yes");
+      expect(field.managerNotices).toHaveLength(1);
+      expect(field.cache.state().answers.get([...field.cache.state().answers.keys()][0] ?? "")?.state).toBe("pending");
+    }
+  });
+
+  it("leaves the answer unconfirmed and says nothing in the group when no manager can be reached", async () => {
+    const field = harness({ classification: '{"kind":"other"}', managersReachable: false });
+    const action = await managerAnswers(field, "how do I reset my password?", "Open settings, then Account, then Reset.");
+    expect(action.kind).toBe("silent");
+    expect([...field.cache.state().answers.values()][0]?.state).toBe("pending");
+    expect(field.logLines.join("\n")).toContain("could not reach any manager");
+    expect(field.logLines.join("\n")).toContain("managersReached=0");
   });
 
   it("stores nothing when the replier is not a manager", async () => {
@@ -102,6 +143,7 @@ describe("an earlier answer is reused when it clearly matches", () => {
   async function fieldWithAnswer(distance: number): Promise<Harness> {
     const field = harness({ classification: '{"kind":"other"}' });
     await managerAnswers(field, "how do I reset my password?", "Open settings, then Account, then Reset.");
+    managersKeep(field);
     const stored = field.memory.stored.get(ANSWERS_NAMESPACE) ?? [];
     field.memory.configure({ searchHits: new Map([[ANSWERS_NAMESPACE, stored.map((line) => ({ text: line.text, blobId: line.blobId, distance }))]]) });
     field.classifyAs('{"kind":"question","themeLabel":"passwords"}');
@@ -133,6 +175,7 @@ describe("an earlier answer is reused when it clearly matches", () => {
     const field = harness({ classification: '{"kind":"other"}' });
     await managerAnswers(field, "how do I reset my password?", "Open settings, then Account, then Reset.", 10);
     await managerAnswers(field, "how do I change my password?", "Use the Reset link on the sign-in screen.", 11);
+    managersKeep(field);
     const stored = field.memory.stored.get(ANSWERS_NAMESPACE) ?? [];
     expect(stored).toHaveLength(2);
     field.memory.configure({ searchHits: new Map([[ANSWERS_NAMESPACE, stored.map((line) => ({ text: line.text, blobId: line.blobId, distance: 0.1 }))]]) });
@@ -143,10 +186,11 @@ describe("an earlier answer is reused when it clearly matches", () => {
     expect(action.kind === "reply" && action.text).toBe(CONFLICTING_ANSWERS_REPLY);
     expect(action.kind === "reply" && action.text).not.toContain("Open settings");
     expect(action.kind === "reply" && action.text).not.toContain("Use the Reset link");
-    expect(field.managerNotices).toHaveLength(1);
-    expect(field.managerNotices[0]?.text).toContain("Open settings");
-    expect(field.managerNotices[0]?.text).toContain("Use the Reset link");
-    expect(field.managerNotices[0]?.answerIds).toHaveLength(2);
+    const conflict = field.managerNotices.at(-1);
+    expect(conflict?.text).toContain("Open settings");
+    expect(conflict?.text).toContain("Use the Reset link");
+    expect(conflict?.answerIds).toHaveLength(2);
+    expect(conflict?.choices.map((choice) => choice.label)).toEqual(["Keep 1", "Retire 1", "Keep 2", "Retire 2"]);
   });
 
   it("never reuses a retired answer", async () => {
@@ -294,6 +338,7 @@ describe("a question too short or too vague to match is never matched", () => {
     const field = harness({ classification: '{"kind":"other"}' });
     await managerAnswers(field, "what did we fix in the android build?", "We fixed the login crash on 2.3.", 10);
     await managerAnswers(field, "what did we ship last week?", "The new checkout screen.", 11);
+    managersKeep(field);
     const stored = field.memory.stored.get(ANSWERS_NAMESPACE) ?? [];
     field.memory.configure({ searchHits: new Map([[ANSWERS_NAMESPACE, stored.map((line) => ({ text: line.text, blobId: line.blobId, distance }))]]) });
     field.classifyAs('{"kind":"question","themeLabel":"releases"}');
@@ -309,7 +354,6 @@ describe("a question too short or too vague to match is never matched", () => {
     );
     expect(action.kind === "reply" && action.text).not.toContain("This came up before");
     expect(action.kind === "reply" && action.text).not.toBe(CONFLICTING_ANSWERS_REPLY);
-    expect(field.managerNotices).toHaveLength(0);
     expect(field.logLines.join("\n")).toContain("reuse_skipped");
     expect(field.logLines.join("\n")).not.toContain("reuse_attempt");
   });

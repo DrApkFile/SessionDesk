@@ -2,7 +2,9 @@ import { confirmAnswer, retireAnswer } from "../../core/answers.js";
 import { ERRORS } from "../../core/errors.js";
 import { onlyMatch } from "../../core/onlyMatch.js";
 import type { AnswerRecord } from "../../core/state.js";
-import { reply, type BotAction } from "../shared/incoming.js";
+import { reply, replyWithChoices, type BotAction } from "../shared/incoming.js";
+import { pendingChoices } from "../shared/answerDecisions.js";
+import { PENDING_ANSWERS_OFFERED } from "../../core/tuning.js";
 import type { ManagerContext, ManagerDeps } from "./deps.js";
 
 function labelOf(answer: AnswerRecord): string {
@@ -26,7 +28,11 @@ export function listAnswers(deps: ManagerDeps): BotAction {
       : ["", `${pending.length} answer(s) are not confirmed, so I never reuse them: ${pending.map((answer) => answer.answerId).join(", ")}`, "Confirm one with /confirm <answerId>."];
   const unhelpful = answers.filter((answer) => answer.state === "active" && answer.unhelpful > answer.helpful);
   const warning = unhelpful.length === 0 ? [] : ["", `${unhelpful.length} confirmed answer(s) are voted down more than up: ${unhelpful.map((answer) => answer.answerId).join(", ")}`];
-  return reply([`${answers.length} answer(s), newest first:`, ...lines, ...waiting, ...warning, "", "Stop one being reused with /retire <answerId>."].join("\n"));
+  const offered = pending.slice(0, PENDING_ANSWERS_OFFERED);
+  return replyWithChoices(
+    [`${answers.length} answer(s), newest first:`, ...lines, ...waiting, ...warning, "", "Stop one being reused with /retire <answerId>."].join("\n"),
+    pendingChoices(offered.map((answer) => answer.answerId)),
+  );
 }
 
 type Found = { readonly kind: "one"; readonly answer: AnswerRecord } | { readonly kind: "refused"; readonly action: BotAction };

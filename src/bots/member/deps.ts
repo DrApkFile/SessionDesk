@@ -1,3 +1,4 @@
+import type { ButtonChoice } from "../../platform/platform.js";
 import type { Clock, IdSource } from "../../core/ports.js";
 import type { LedgerCache } from "../../memory/cache.js";
 import type { MemoryPort } from "../../memory/port.js";
@@ -31,4 +32,13 @@ export interface MemberDeps {
   readonly notifyManagers: ManagerNotice;
 }
 
-export type ManagerNotice = (notice: { readonly text: string; readonly answerIds: readonly string[] }) => Promise<void>;
+export interface ManagerNoticeDelivery {
+  readonly delivered: number;
+  readonly failed: number;
+}
+
+export type ManagerNotice = (notice: {
+  readonly text: string;
+  readonly answerIds: readonly string[];
+  readonly choices: readonly ButtonChoice[];
+}) => Promise<ManagerNoticeDelivery>;

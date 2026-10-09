@@ -47,6 +47,7 @@ export type PlatformAction =
       readonly text: string;
       readonly offerConsent: boolean;
       readonly pin?: boolean;
+      readonly choices?: readonly ButtonChoice[];
     };
 
 export interface ButtonTap {

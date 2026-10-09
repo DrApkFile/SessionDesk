@@ -1,6 +1,6 @@
 import { MemberService } from "../../src/bots/member/service.js";
 import type { IncomingMessage } from "../../src/bots/shared/incoming.js";
-import { userKey, type ChatKind, type Platform } from "../../src/platform/platform.js";
+import { userKey, type ButtonChoice, type ChatKind, type Platform } from "../../src/platform/platform.js";
 import { MemberDirectory } from "../../src/bots/shared/directory.js";
 import { MemoryHealth } from "../../src/bots/shared/health.js";
 import { Log } from "../../src/bots/shared/log.js";
@@ -35,6 +35,7 @@ export interface HarnessOptions {
   readonly platform?: Platform;
   readonly communityChatId?: string | number | null;
   readonly directMessagesNeedOptIn?: boolean;
+  readonly managersReachable?: boolean;
 }
 
 export interface MessageDraft {
@@ -79,7 +80,7 @@ export interface Harness {
   readonly replies: ReplyChain;
   readonly waits: number[];
   readonly directory: MemberDirectory;
-  readonly managerNotices: Array<{ text: string; answerIds: readonly string[] }>;
+  readonly managerNotices: Array<{ text: string; answerIds: readonly string[]; choices: readonly ButtonChoice[] }>;
   readonly cache: LedgerCache;
   readonly queue: WriteQueue;
   readonly memory: FakeMemory;
@@ -156,7 +157,7 @@ export function harness(options: HarnessOptions = {}): Harness {
   });
   const directory = new MemberDirectory();
   const self = { username: "sdmemberbot" };
-  const managerNotices: Array<{ text: string; answerIds: readonly string[] }> = [];
+  const managerNotices: Array<{ text: string; answerIds: readonly string[]; choices: readonly ButtonChoice[] }> = [];
   const clock = { now: () => modelState.at };
   const waits: number[] = [];
   const gemini = new GeminiModel({ apiKey: "AIzatestkey", model: "gemini-3.8-flash", fallbackModel: "gemini-3.5-flash" }, async () => {}, modelFetch(options, modelState));
@@ -190,7 +191,9 @@ export function harness(options: HarnessOptions = {}): Harness {
     directory,
     directMessagesNeedOptIn: options.directMessagesNeedOptIn ?? true,
     notifyManagers: async (notice) => {
-      managerNotices.push(notice);
+      managerNotices.push({ text: notice.text, answerIds: notice.answerIds, choices: notice.choices });
+      const reachable = options.managersReachable ?? true;
+      return reachable ? { delivered: 1, failed: 0 } : { delivered: 0, failed: 1 };
     },
     memory,
     managerIds: options.managerKeys ?? [userKey("telegram", String(MANAGER_ID))],

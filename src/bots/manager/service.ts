@@ -9,7 +9,7 @@ import type { ButtonTap } from "../../platform/platform.js";
 import type { ManagerContext, ManagerDeps } from "./deps.js";
 import { MANAGER_HELP } from "./help.js";
 import { confirm, listAnswers, retire } from "./answerCommands.js";
-import { answerDecisionIn } from "./answerDecisions.js";
+import { ONLY_MANAGERS_POPUP, answerDecisionIn } from "../shared/answerDecisions.js";
 import { addManager, claim, removeManager, setupCommunity } from "./setupCommands.js";
 import { listNotes, writeNote } from "./noteCommands.js";
 import { donePromise, makePromise, owed } from "./promiseCommands.js";
@@ -109,7 +109,7 @@ export class ManagerService {
     };
     if (!this.#mayManage(message)) {
       this.#deps.log.say("not_manager", { platform: tap.platform, chat: tap.chatKind, reason: "tapped an answer button without manager rights" });
-      return { ignored: false, alert: ERRORS.NOT_MANAGER.message };
+      return { ignored: false, alert: ONLY_MANAGERS_POPUP };
     }
     const context: ManagerContext = { message, managerId: tap.userId, replyToMemberH: null };
     const action = decision.decision === "keep" ? confirm(this.#deps, context, decision.answerId) : retire(this.#deps, context, decision.answerId);

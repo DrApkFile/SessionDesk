@@ -44,6 +44,7 @@ export const DEFAULT_PORT = 3000;
 
 export const ANSWER_MAX_DISTANCE = 0.56;
 export const MIN_REUSE_CONTENT_WORDS = 2;
+export const PENDING_ANSWERS_OFFERED = 5;
 export const ANSWER_SEARCH_LIMIT = 5;
 export const KNOWN_ISSUE_MAX_DISTANCE = 0.5;
 export const KNOWN_ISSUE_SEARCH_LIMIT = 5;

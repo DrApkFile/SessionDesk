@@ -12,6 +12,9 @@ import { ANSWER_FEEDBACK_WINDOW_MINUTES, ANSWER_MAX_DISTANCE, KNOWN_ISSUE_MAX_DI
 import { clipStoredText } from "../../core/text.js";
 import { lookUpCommunityKnowledge } from "./communityLookup.js";
 import { conflictNoteForManagers, conflictingAnswersReply, earlierAnswerReply, findEarlierAnswer, findKnownIssue, knownIssueReply } from "./reuse.js";
+import { captureChoices, decisionChoices } from "../shared/answerDecisions.js";
+import { NO_MANAGER_REACHABLE, answerToConfirmNotice } from "../shared/answerNotice.js";
+import type { AnswerSource } from "../../core/vocabulary.js";
 import { reuseQueryOf, strippedOfNames } from "../../core/reuseQuery.js";
 import type { CommittableWrite } from "../shared/pipeline.js";
 import { internalLeakIn, reviewReply } from "../../core/replyGuard.js";
@@ -35,14 +38,19 @@ import {
   SECRET_WARNING,
   FEEDBACK_HELPFUL,
   FEEDBACK_NOT_HELPFUL,
-  ANSWER_DISCARDED,
-  ANSWER_KEPT,
   TAP_ALREADY,
-  confirmAnswerCapture,
   tapNeedsDmStart,
   tapWelcome,
   type ConsentScope,
 } from "./notices.js";
+
+interface AnswerCapture {
+  readonly answerId: string;
+  readonly question: string | null;
+  readonly answer: string;
+  readonly source: AnswerSource;
+  readonly writes: readonly CommittableWrite[];
+}
 
 export interface ConsentTap {
   readonly platform?: Platform;
@@ -62,7 +70,6 @@ export interface TapOutcome {
 export class MemberService {
   readonly #deps: MemberDeps;
   readonly #offers = new Map<string, { answerId: string; at: number }>();
-  readonly #candidates = new Map<string, { question: string; answer: string; label: string | undefined; at: number }>();
 
   constructor(deps: MemberDeps) {
     this.#deps = deps;
@@ -129,7 +136,7 @@ export class MemberService {
     this.#deps.log.say("dm_address_stored", { memberH, note: "telegram id stored encrypted for promise follow-ups" });
   }
 
-  #proposeAnswerCapture(message: IncomingMessage, kind: MessageKind, label: string | undefined): MemberAction | null {
+  #captureManagerAnswer(message: IncomingMessage, kind: MessageKind, label: string | undefined): AnswerCapture | null {
     const question = message.replyToText;
     if (question === null || message.replyToUserId === null || message.replyToIsBot) return null;
     if (!this.#deps.managerIds.includes(userKey(message.platform, message.userId))) return null;
@@ -143,81 +150,73 @@ export class MemberService {
       this.#deps.log.say("answer_not_captured", { chat: chatLabel(message), because: verdict.because });
       return null;
     }
-    this.#candidates.set(`${message.chatId}|${userKey(message.platform, message.userId)}`, {
-      question: clipStoredText(question),
-      answer: clipStoredText(message.text),
-      label,
-      at: this.#deps.clock.now().getTime(),
-    });
-    this.#deps.log.say("answer_proposed", { chat: chatLabel(message), awaitingConfirmation: true });
-    return reply(confirmAnswerCapture(clipStoredText(question), clipStoredText(message.text)));
-  }
-
-  #readCaptureConfirmation(message: IncomingMessage): MemberAction | null {
-    const key = `${message.chatId}|${userKey(message.platform, message.userId)}`;
-    const candidate = this.#candidates.get(key);
-    if (candidate === undefined) return null;
-    if ((this.#deps.clock.now().getTime() - candidate.at) / 60_000 > ANSWER_FEEDBACK_WINDOW_MINUTES) {
-      this.#candidates.delete(key);
-      return null;
-    }
-    const reading = readFeedback(message.text);
-    if (reading === "unclear") return null;
-    this.#candidates.delete(key);
-    if (reading === "unhelpful") {
-      this.#deps.log.say("answer_discarded", { chat: chatLabel(message) });
-      return reply(ANSWER_DISCARDED);
-    }
-
-    const state = this.#deps.cache.state();
-    const theme = themeFor(candidate.label, [...state.themes.values()].map((held) => ({ themeId: held.themeId, label: held.label })), this.#deps.ids);
-    if (!theme.ok) return reply(ANSWER_DISCARDED);
-    const created: readonly CommittableWrite[] = theme.value.created === null ? [] : [{ draft: theme.value.created, namespaces: [{ kind: "themes" }] }];
+    const theme = this.#themeFor(label);
+    if (theme === null) return null;
     const answerId = this.#deps.ids.newAnswerId();
-    this.#deps.pipeline.commit(
-      [
-        ...created,
+    const questionText = strippedOfNames(clipStoredText(question), [this.#deps.self.username], this.#knownNames());
+    const answerText = clipStoredText(message.text);
+    this.#deps.log.say("answer_captured", { chat: chatLabel(message), answerId, source: "manager", reusable: false });
+    return {
+      answerId,
+      question: questionText,
+      answer: answerText,
+      source: "manager",
+      writes: [
+        ...theme.created,
         {
-          draft: {
-            type: "ANSWER",
-            answerId,
-            questionText: strippedOfNames(candidate.question, [this.#deps.self.username], this.#knownNames()),
-            answerText: candidate.answer,
-            answeredBy: "manager",
-            themeId: theme.value.themeId,
-            confirmed: true,
-          },
+          draft: { type: "ANSWER", answerId, questionText, answerText, answeredBy: "manager", themeId: theme.themeId },
           namespaces: [{ kind: "answers" }],
         },
       ],
-      { chatId: message.chatId, messageId: message.messageId },
-      this.#deps.clock.now(),
-    );
-    this.#deps.log.say("answer_kept", { chat: chatLabel(message), answerId });
-    return reply(ANSWER_KEPT);
+    };
   }
 
-  #captureThankedAnswer(message: IncomingMessage, kind: string, planned: readonly PlannedWrite[], label: string | undefined): readonly CommittableWrite[] {
-    if (kind !== "thanks" || !planned.some((write) => write.draft.type === "CONTRIBUTION")) return [];
+  #themeFor(label: string | undefined): { readonly themeId: string; readonly created: readonly CommittableWrite[] } | null {
+    const held = [...this.#deps.cache.state().themes.values()].map((theme) => ({ themeId: theme.themeId, label: theme.label }));
+    const theme = themeFor(label, held, this.#deps.ids);
+    if (!theme.ok) return null;
+    return { themeId: theme.value.themeId, created: theme.value.created === null ? [] : [{ draft: theme.value.created, namespaces: [{ kind: "themes" }] }] };
+  }
+
+  async #askManagersToConfirm(capture: AnswerCapture): Promise<void> {
+    const delivery = await this.#deps
+      .notifyManagers({
+        text: answerToConfirmNotice(capture.source, capture.question, capture.answer, capture.answerId),
+        answerIds: [capture.answerId],
+        choices: captureChoices(capture.answerId),
+      })
+      .catch(() => ({ delivered: 0, failed: 0 }));
+    this.#deps.log.say("answer_awaiting_confirmation", {
+      answerId: capture.answerId,
+      source: capture.source,
+      managersReached: delivery.delivered,
+      managersUnreachable: delivery.failed,
+      note: delivery.delivered === 0 ? NO_MANAGER_REACHABLE : "pending until a manager taps Keep",
+    });
+  }
+
+  #captureThankedAnswer(message: IncomingMessage, kind: string, planned: readonly PlannedWrite[], label: string | undefined): AnswerCapture | null {
+    if (kind !== "thanks" || !planned.some((write) => write.draft.type === "CONTRIBUTION")) return null;
     const answerText = message.replyToText;
-    if (answerText === null || !guardStoredText(answerText).ok) return [];
-    const state = this.#deps.cache.state();
-    const theme = themeFor(label, [...state.themes.values()].map((held) => ({ themeId: held.themeId, label: held.label })), this.#deps.ids);
-    if (!theme.ok) return [];
-    const created: readonly CommittableWrite[] = theme.value.created === null ? [] : [{ draft: theme.value.created, namespaces: [{ kind: "themes" }] }];
-    return [
-      ...created,
-      {
-        draft: {
-          type: "ANSWER",
-          answerId: this.#deps.ids.newAnswerId(),
-          answerText: clipStoredText(answerText),
-          answeredBy: "member",
-          themeId: theme.value.themeId,
+    if (answerText === null || !guardStoredText(answerText).ok) return null;
+    const theme = this.#themeFor(label);
+    if (theme === null) return null;
+    const answerId = this.#deps.ids.newAnswerId();
+    const clipped = clipStoredText(answerText);
+    this.#deps.log.say("answer_captured", { chat: chatLabel(message), answerId, source: "member", reusable: false });
+    return {
+      answerId,
+      question: null,
+      answer: clipped,
+      source: "member",
+      writes: [
+        ...theme.created,
+        {
+          draft: { type: "ANSWER", answerId, answerText: clipped, answeredBy: "member", themeId: theme.themeId },
+          namespaces: [{ kind: "answers" }],
         },
-        namespaces: [{ kind: "answers" }],
-      },
-    ];
+      ],
+    };
   }
 
   #upgradeToDm(message: IncomingMessage, memberH: string): MemberAction {
@@ -330,9 +329,6 @@ export class MemberService {
       return message.mentionsBot ? reply(GROUP_OPTIN_PROMPT, true) : silent("no consent, not mentioned");
     }
 
-    const confirmed = this.#readCaptureConfirmation(message);
-    if (confirmed !== null) return confirmed;
-
     const feedback = this.#readAnswerFeedback(message, memberH);
     if (feedback !== null) return feedback;
 
@@ -366,7 +362,9 @@ export class MemberService {
     const kind = classified.value.classification.kind;
     const visibility: ItemVisibility = isPrivate(message) ? "private" : "public";
     const planned = this.#planFor(classified.value.classification, message.text, memberH, this.#helperFor(message), visibility);
-    const answerWrites = this.#captureThankedAnswer(message, kind, planned, classified.value.classification.themeLabel);
+    const thanked = this.#captureThankedAnswer(message, kind, planned, classified.value.classification.themeLabel);
+    const capture = thanked ?? this.#captureManagerAnswer(message, kind, classified.value.classification.themeLabel);
+    const answerWrites = capture === null ? [] : capture.writes;
 
     let knownIssue = null;
     let writes: readonly CommittableWrite[] = [...planned, ...answerWrites];
@@ -387,8 +385,6 @@ export class MemberService {
       }
     }
 
-    const proposal = this.#proposeAnswerCapture(message, kind, classified.value.classification.themeLabel);
-
     if (writes.length > 0) {
       const recorded = this.#deps.pipeline.commit(writes, { chatId: message.chatId, messageId: message.messageId }, this.#deps.clock.now());
       this.#deps.log.say("stored", {
@@ -402,12 +398,12 @@ export class MemberService {
       });
     }
 
+    if (capture !== null) await this.#askManagersToConfirm(capture);
+
     if (knownIssue !== null) {
       const affected = this.#deps.cache.state().items.get(knownIssue.item.itemId)?.affected ?? knownIssue.item.affected;
       return this.#speak(message, knownIssueReply(knownIssue, affected));
     }
-
-    if (proposal !== null) return proposal;
 
     if (kind === "question") {
       const query = reuseQueryOf(message.text, [this.#deps.self.username], this.#knownNames());
@@ -443,7 +439,11 @@ export class MemberService {
           const matches = attempt.lookup.matches;
           this.#deps.log.say("reuse_conflict", { memberH, answers: matches.map((match) => match.answer.answerId).join(",") });
           await this.#deps
-            .notifyManagers({ text: conflictNoteForManagers(query.text, matches), answerIds: matches.slice(0, 2).map((match) => match.answer.answerId) })
+            .notifyManagers({
+              text: conflictNoteForManagers(query.text, matches),
+              answerIds: matches.slice(0, 2).map((match) => match.answer.answerId),
+              choices: decisionChoices(matches.slice(0, 2).map((match) => match.answer.answerId)),
+            })
             .catch(() => undefined);
           return this.#speak(message, conflictingAnswersReply());
         }

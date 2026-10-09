@@ -83,10 +83,10 @@ async function everyMemberFacingReply(): Promise<readonly string[]> {
   const reuse = harness({ classification: '{"kind":"other"}' });
   reuse.service.recordConsent(MANAGER_ID, MANAGER_ID, 1, "storage");
   await reuse.service.handle(
-    reuse.message({ userId: MANAGER_ID, messageId: 95, text: "Open settings, then Account, then Reset.", replyToUserId: MEMBER, replyToText: "how do I reset my password?", mentionsBot: true }),
+    reuse.message({ userId: MANAGER_ID, messageId: 95, text: "Open settings, then Account, then Reset.", replyToUserId: MEMBER, replyToText: "how do I reset my password?" }),
   );
-  await reuse.service.handle(reuse.message({ userId: MANAGER_ID, messageId: 595, text: "yes", mentionsBot: true }));
   await reuse.queue.settled();
+  confirmPending(reuse);
   const answers = reuse.memory.stored.get(ANSWERS_NAMESPACE) ?? [];
   reuse.memory.configure({ searchHits: new Map([[ANSWERS_NAMESPACE, answers.map((line) => ({ text: line.text, blobId: line.blobId, distance: 0.05 }))]]) });
   reuse.classifyAs('{"kind":"question","themeLabel":"passwords"}');
@@ -102,10 +102,10 @@ async function everyMemberFacingReply(): Promise<readonly string[]> {
     [100, "how do I reset my password?", "Open settings, then Account, then Reset."],
     [101, "how do I change my password?", "Use the Reset link on the sign-in screen."],
   ] as const) {
-    await clash.service.handle(clash.message({ userId: MANAGER_ID, messageId, text: answer, replyToUserId: MEMBER, replyToText: question, mentionsBot: true }));
-    await clash.service.handle(clash.message({ userId: MANAGER_ID, messageId: messageId + 500, text: "yes", mentionsBot: true }));
+    await clash.service.handle(clash.message({ userId: MANAGER_ID, messageId, text: answer, replyToUserId: MEMBER, replyToText: question }));
   }
   await clash.queue.settled();
+  confirmPending(clash);
   const both = clash.memory.stored.get(ANSWERS_NAMESPACE) ?? [];
   clash.memory.configure({ searchHits: new Map([[ANSWERS_NAMESPACE, both.map((line) => ({ text: line.text, blobId: line.blobId, distance: 0.05 }))]]) });
   clash.classifyAs('{"kind":"question","themeLabel":"passwords"}');
@@ -115,6 +115,22 @@ async function everyMemberFacingReply(): Promise<readonly string[]> {
   expect(conflicting.kind === "reply" && conflicting.text).toBe(CONFLICTING_ANSWERS_REPLY);
 
   return said;
+}
+
+function confirmPending(field: Harness): void {
+  let seq = 900;
+  for (const answer of [...field.cache.state().answers.values()].filter((held) => held.state === "pending")) {
+    seq += 1;
+    field.cache.record({
+      seq,
+      namespace: ANSWERS_NAMESPACE,
+      memberH: null,
+      event: { type: "ANSWER_CONFIRMED", answerId: answer.answerId, byManagerId: String(MANAGER_ID), seq, ts: "2026-10-09T11:00:00.000Z" },
+      state: "saved",
+      blobId: `bkeep${seq}`,
+      code: null,
+    });
+  }
 }
 
 describe("a member never sees an internal format", () => {
@@ -192,10 +208,10 @@ describe("did this help", () => {
     const field = harness({ classification: '{"kind":"other"}' });
     field.service.recordConsent(MANAGER_ID, MANAGER_ID, 1, "storage");
     await field.service.handle(
-      field.message({ userId: MANAGER_ID, messageId: 10, text: "Open settings, then Account, then Reset.", replyToUserId: MEMBER, replyToText: "how do I reset my password?", mentionsBot: true }),
+      field.message({ userId: MANAGER_ID, messageId: 10, text: "Open settings, then Account, then Reset.", replyToUserId: MEMBER, replyToText: "how do I reset my password?" }),
     );
-    await field.service.handle(field.message({ userId: MANAGER_ID, messageId: 510, text: "yes", mentionsBot: true }));
     await field.queue.settled();
+    confirmPending(field);
     const answers = field.memory.stored.get(ANSWERS_NAMESPACE) ?? [];
     field.memory.configure({ searchHits: new Map([[ANSWERS_NAMESPACE, answers.map((line) => ({ text: line.text, blobId: line.blobId, distance: 0.05 }))]]) });
     field.classifyAs('{"kind":"question","themeLabel":"passwords"}');

@@ -24,7 +24,6 @@ import { CommunityChat } from "./bots/shared/startup.js";
 import { MemberService } from "./bots/member/service.js";
 import { createNotesMemory } from "./bots/manager/notes.js";
 import { ManagerService } from "./bots/manager/service.js";
-import { decisionChoices } from "./bots/manager/answerDecisions.js";
 import { MemberDirectory } from "./bots/shared/directory.js";
 import { NamespaceRouter } from "./memory/router.js";
 import { PLATFORMS, userKey } from "./platform/platform.js";
@@ -164,12 +163,22 @@ const service = new MemberService({
   self,
   directMessagesNeedOptIn: true,
   notifyManagers: async (notice) => {
+    let delivered = 0;
+    let failed = 0;
     for (const managerKey of config.telegram?.managerIds ?? []) {
+      let reached = false;
       for (const runtime of runtimes) {
-        await runtime.toManager(managerKey, notice.text, decisionChoices(notice.answerIds)).catch(() => undefined);
+        const sent = await runtime
+          .toManager(managerKey, notice.text, notice.choices)
+          .then(() => true)
+          .catch(() => false);
+        reached = reached || sent;
       }
+      if (reached) delivered += 1;
+      else failed += 1;
     }
-    log.say("managers_notified", { answers: notice.answerIds.join(","), managers: config.telegram?.managerIds.length ?? 0 });
+    log.say("managers_notified", { answers: notice.answerIds.join(","), delivered, unreachable: failed });
+    return { delivered, failed };
   },
 });
 member = service;

@@ -3,7 +3,7 @@ import { ERRORS } from "../../src/core/errors.js";
 import { SUMMARY_HEADER } from "../../src/bots/manager/summary.js";
 import { WEEKLY_HEADER } from "../../src/bots/manager/weekly.js";
 import { MANAGER_ID, NOTES_NAMESPACE, OUTSIDER_ID, managerHarness, type ManagerHarness } from "../support/managerHarness.js";
-import { answerDecisionCallback, answerDecisionIn, decisionChoices } from "../../src/bots/manager/answerDecisions.js";
+import { ONLY_MANAGERS_POPUP, answerDecisionCallback, answerDecisionIn, captureChoices, decisionChoices } from "../../src/bots/shared/answerDecisions.js";
 
 const MEMBER_ID = 42_000_001;
 
@@ -468,6 +468,28 @@ describe("an answer is reusable only once a manager has confirmed it", () => {
   it("asks for the id when none is given", async () => {
     expect(await managerHarness().ask("/confirm")).toContain("Use /confirm <answerId>");
   });
+
+  it("offers Keep and Discard buttons beside every pending answer in /answers", async () => {
+    const field = managerHarness();
+    recordLegacyAnswer(field, "a-one");
+    recordLegacyAnswer(field, "a-two");
+    recordAnswer(field, "a-live");
+    const action = await field.service.handle(field.message({ text: "/answers" }));
+    expect(action.kind).toBe("reply");
+    if (action.kind !== "reply") return;
+    expect(action.choices?.map((choice) => choice.callback)).toEqual([
+      "answer:keep:a-two",
+      "answer:retire:a-two",
+      "answer:keep:a-one",
+      "answer:retire:a-one",
+    ]);
+  });
+
+  it("labels the capture buttons Keep and Discard, both acting on the same answer", () => {
+    const choices = captureChoices("a-1");
+    expect(choices.map((choice) => choice.label)).toEqual(["Keep", "Discard"]);
+    expect(choices.map((choice) => choice.callback)).toEqual(["answer:keep:a-1", "answer:retire:a-1"]);
+  });
 });
 
 describe("the Keep and Retire buttons on a conflict notice", () => {
@@ -528,7 +550,7 @@ describe("the Keep and Retire buttons on a conflict notice", () => {
       messageId: "92",
       callback: answerDecisionCallback("retire", "a-legacy"),
     });
-    expect(outcome.alert).toContain(ERRORS.NOT_MANAGER.message);
+    expect(outcome.alert).toBe(ONLY_MANAGERS_POPUP);
     expect(field.cache.state().answers.get("a-legacy")?.state).toBe("pending");
     expect(field.logLines.join("\n")).toContain("not_manager");
   });

@@ -29,3 +29,19 @@ export function decisionChoices(answerIds: readonly string[]): readonly ButtonCh
     { label: `Retire ${index + 1}`, callback: answerDecisionCallback("retire", answerId) },
   ]);
 }
+
+export function captureChoices(answerId: string): readonly ButtonChoice[] {
+  return [
+    { label: "Keep", callback: answerDecisionCallback("keep", answerId) },
+    { label: "Discard", callback: answerDecisionCallback("retire", answerId) },
+  ];
+}
+
+export function pendingChoices(answerIds: readonly string[]): readonly ButtonChoice[] {
+  return answerIds.flatMap((answerId) => [
+    { label: `Keep ${answerId}`, callback: answerDecisionCallback("keep", answerId) },
+    { label: `Discard ${answerId}`, callback: answerDecisionCallback("retire", answerId) },
+  ]);
+}
+
+export const ONLY_MANAGERS_POPUP = "Only managers can do this. Nothing changed.";
