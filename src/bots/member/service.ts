@@ -17,7 +17,7 @@ import { NO_MANAGER_REACHABLE, answerToConfirmNotice } from "../shared/answerNot
 import type { AnswerSource } from "../../core/vocabulary.js";
 import { reuseQueryOf, strippedOfNames } from "../../core/reuseQuery.js";
 import { keyTermsIn, type TermAgreement } from "../../core/keyTerms.js";
-import type { AnswerMatch } from "../../core/answers.js";
+import { recheckForReuse, snapshotForReuse, type AnswerMatch, type ReuseSnapshot } from "../../core/answers.js";
 import type { CommittableWrite } from "../shared/pipeline.js";
 import { internalLeakIn, reviewReply } from "../../core/replyGuard.js";
 import { planWrites, themeFor, type PlannedWrite } from "../../core/writeGate.js";
@@ -31,6 +31,8 @@ import type { HeldMessage, RetryOutcome } from "../shared/pending.js";
 import { chatLabel, commandOf, isCommand, isPrivate, reply, silent, type IncomingMessage, type MemberAction } from "../shared/incoming.js";
 import {
   ALREADY_CONSENTED,
+  ANSWER_CHANGED,
+  ANSWER_WITHDRAWN,
   CONSENT_NOTICE,
   CONSENT_RECORDED,
   DM_CONSENT_RECORDED,
@@ -72,7 +74,7 @@ export interface TapOutcome {
 export class MemberService {
   readonly #deps: MemberDeps;
   readonly #offers = new Map<string, { answerId: string; at: number }>();
-  readonly #pendingClarifications = new Map<string, { answerId: string; blobId: string; question: string; at: number }>();
+  readonly #pendingClarifications = new Map<string, { snapshot: ReuseSnapshot; question: string; at: number }>();
 
   constructor(deps: MemberDeps) {
     this.#deps = deps;
@@ -304,8 +306,7 @@ export class MemberService {
       return this.#answer(message, memberH, false, false);
     }
     this.#pendingClarifications.set(`${message.chatId}|${memberH}`, {
-      answerId: match.answer.answerId,
-      blobId: match.blobId,
+      snapshot: snapshotForReuse(match),
       question: message.text,
       at: this.#deps.clock.now().getTime(),
     });
@@ -332,14 +333,25 @@ export class MemberService {
       return null;
     }
     this.#pendingClarifications.delete(key);
-    const answer = this.#deps.cache.state().answers.get(pending.answerId);
-    if (reading === "helpful" && answer !== undefined && answer.state === "active") {
-      this.#deps.log.say("answer_reused", { memberH, answerId: answer.answerId, after: "clarification" });
-      this.#offerPending(message, memberH, answer.answerId);
-      return this.#speak(message, earlierAnswerReply({ answer, blobId: pending.blobId, distance: 0 }));
+    if (reading === "helpful") {
+      const rechecked = recheckForReuse(this.#deps.cache.state(), pending.snapshot);
+      if (rechecked.kind === "reusable") {
+        this.#deps.log.say("answer_reused", { memberH, answerId: rechecked.match.answer.answerId, after: "clarification" });
+        this.#offerPending(message, memberH, rechecked.match.answer.answerId);
+        return this.#speak(message, earlierAnswerReply(rechecked.match));
+      }
+      this.#deps.log.say("reuse_dropped", { memberH, answerId: pending.snapshot.answerId, because: rechecked.kind, after: "clarification" });
+      const notice = rechecked.kind === "withdrawn" ? ANSWER_WITHDRAWN : ANSWER_CHANGED;
+      return this.#answerAfterNotice(message, memberH, pending.question, notice);
     }
-    this.#deps.log.say("reuse_declined", { memberH, answerId: pending.answerId });
+    this.#deps.log.say("reuse_declined", { memberH, answerId: pending.snapshot.answerId });
     return this.#answer({ ...message, text: pending.question }, memberH, false, false);
+  }
+
+  async #answerAfterNotice(message: IncomingMessage, memberH: string, question: string, notice: string): Promise<MemberAction> {
+    const answered = await this.#answer({ ...message, text: question }, memberH, false, false);
+    if (answered.kind !== "reply") return answered;
+    return { ...answered, text: `${notice}\n\n${answered.text}` };
   }
 
   #offerPending(message: IncomingMessage, memberH: string, answerId: string): void {

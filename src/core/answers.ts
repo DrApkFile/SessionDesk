@@ -3,7 +3,7 @@ import { agreeOnKeyTerms, agreeOnReportTerms, type TermAgreement } from "./keyTe
 import { refuse, ok, type Result } from "./result.js";
 import type { AnswerRecord, CommunityState, ItemFacts } from "./state.js";
 import { ANSWER_MAX_DISTANCE, KNOWN_ISSUE_MAX_DISTANCE } from "./tuning.js";
-import type { AnswerState } from "./vocabulary.js";
+import type { AnswerSource, AnswerState } from "./vocabulary.js";
 
 export interface SearchHit {
   readonly text: string;
@@ -34,6 +34,46 @@ export const OPEN_ITEM_STATUSES = ["reported", "acknowledged"] as const;
 export function retireAnswer(current: AnswerState): Result<AnswerState> {
   if (current === "retired") return refuse("INVALID_TRANSITION", "that answer is already retired");
   return ok("retired");
+}
+
+export interface ReuseSnapshot {
+  readonly answerId: string;
+  readonly questionText: string | null;
+  readonly answerText: string;
+  readonly answeredBy: AnswerSource;
+  readonly ts: string;
+  readonly seq: number;
+  readonly blobId: string;
+}
+
+export type ReuseRecheck =
+  | { readonly kind: "reusable"; readonly match: AnswerMatch }
+  | { readonly kind: "withdrawn" }
+  | { readonly kind: "changed" };
+
+export function snapshotForReuse(match: AnswerMatch): ReuseSnapshot {
+  return {
+    answerId: match.answer.answerId,
+    questionText: match.answer.questionText,
+    answerText: match.answer.answerText,
+    answeredBy: match.answer.answeredBy,
+    ts: match.answer.ts,
+    seq: match.answer.seq,
+    blobId: match.blobId,
+  };
+}
+
+export function recheckForReuse(state: CommunityState, snapshot: ReuseSnapshot): ReuseRecheck {
+  const answer = state.answers.get(snapshot.answerId);
+  if (answer === undefined || answer.state !== "active") return { kind: "withdrawn" };
+  const unchanged =
+    answer.answerText === snapshot.answerText &&
+    answer.questionText === snapshot.questionText &&
+    answer.answeredBy === snapshot.answeredBy &&
+    answer.ts === snapshot.ts &&
+    answer.seq === snapshot.seq;
+  if (!unchanged) return { kind: "changed" };
+  return { kind: "reusable", match: { answer, blobId: snapshot.blobId, distance: 0 } };
 }
 
 export function confirmAnswer(current: AnswerState): Result<AnswerState> {

@@ -3,6 +3,9 @@ import { encode } from "../../src/core/codec.js";
 import { ANSWER_MAX_DISTANCE, KNOWN_ISSUE_MAX_DISTANCE, MIN_REUSE_CONTENT_WORDS } from "../../src/core/tuning.js";
 import { CONFLICTING_ANSWERS_REPLY } from "../../src/bots/member/reuse.js";
 import { GROUP_CHAT_ID, MANAGER_ID, harness, type Harness } from "../support/memberHarness.js";
+import { managerHarness } from "../support/managerHarness.js";
+import { answerDecisionCallback } from "../../src/bots/shared/answerDecisions.js";
+import { ANSWER_CHANGED, ANSWER_WITHDRAWN } from "../../src/bots/member/notices.js";
 import type { MemberAction } from "../../src/bots/shared/incoming.js";
 import { reuseQueryOf } from "../../src/core/reuseQuery.js";
 import { storedLine } from "../../src/core/searchableLine.js";
@@ -430,6 +433,74 @@ describe("a question that differs by one key term is asked about, not answered f
     expect(said).not.toContain("This came up before");
     expect(said).not.toContain("faucet page");
     expect(field.logLines.join("\n")).toContain("reuse_declined");
+  });
+
+  it("reuses the answer when it is still active at the moment of the yes", async () => {
+    const field = await fieldWithAnswerAbout(SUI_QUESTION, SUI_ANSWER);
+    await ask(field, "how do I get testnet SOL?", 141);
+    expect(field.cache.state().answers.get("a-faucet")?.state).toBe("active");
+    const said = await ask(field, "yes", 142);
+    expect(said).toContain("This came up before");
+    expect(said).toContain("Open the faucet page");
+    expect(said).not.toContain(ANSWER_WITHDRAWN);
+    expect(field.logLines.join("\n")).toContain("answer_reused");
+  });
+
+  it("shows nothing when a manager retires the answer between the question and the yes", async () => {
+    const field = await fieldWithAnswerAbout(SUI_QUESTION, SUI_ANSWER);
+    await ask(field, "how do I get testnet SOL?", 143);
+    const boss = managerHarness({ cache: field.cache, seqFrom: 5000 });
+    await boss.ask("/retire a-faucet");
+    expect(field.cache.state().answers.get("a-faucet")?.state).toBe("retired");
+    const said = await ask(field, "yes", 144);
+    expect(said).toContain(ANSWER_WITHDRAWN);
+    expect(said).not.toContain("This came up before");
+    expect(said).not.toContain("faucet page");
+    expect(field.logLines.join("\n")).toContain("reuse_dropped");
+    expect(field.logLines.join("\n")).toContain("because=withdrawn");
+    expect(field.logLines.join("\n")).not.toContain("answer_reused");
+  });
+
+  it("shows nothing when a manager taps Discard between the question and the yes", async () => {
+    const field = await fieldWithAnswerAbout(SUI_QUESTION, SUI_ANSWER);
+    await ask(field, "how do I get testnet SOL?", 145);
+    const boss = managerHarness({ cache: field.cache, seqFrom: 6000 });
+    const tapped = await boss.service.decisionFromTap({
+      platform: "telegram",
+      userId: String(MANAGER_ID),
+      chatId: String(MANAGER_ID),
+      chatKind: "direct",
+      messageId: "900",
+      callback: answerDecisionCallback("retire", "a-faucet"),
+    });
+    expect(tapped.ignored).toBe(false);
+    expect(field.cache.state().answers.get("a-faucet")?.state).toBe("retired");
+    const said = await ask(field, "yes", 146);
+    expect(said).toContain(ANSWER_WITHDRAWN);
+    expect(said).not.toContain("faucet page");
+    expect(field.logLines.join("\n")).toContain("because=withdrawn");
+  });
+
+  it("shows nothing when the answer on record changed between the question and the yes", async () => {
+    const field = await fieldWithAnswerAbout(SUI_QUESTION, SUI_ANSWER);
+    await ask(field, "how do I get testnet SOL?", 147);
+    const edited = {
+      type: "ANSWER",
+      answerId: "a-faucet",
+      questionText: SUI_QUESTION,
+      answerText: "The faucet is closed; ask a manager for testnet SUI.",
+      answeredBy: "manager",
+      themeId: "t-faucet",
+      seq: 310,
+      ts: "2026-10-07T09:00:00.000Z",
+      confirmed: true,
+    } as const satisfies LedgerEvent;
+    field.cache.record({ seq: 310, namespace: ANSWERS_NAMESPACE, memberH: null, event: edited, state: "saved", blobId: "bfaucet", code: null });
+    const said = await ask(field, "yes", 148);
+    expect(said).toContain(ANSWER_CHANGED);
+    expect(said).not.toContain("This came up before");
+    expect(said).not.toContain("faucet page");
+    expect(field.logLines.join("\n")).toContain("because=changed");
   });
 
   it("reuses it without asking when the question names the same terms in another order", async () => {

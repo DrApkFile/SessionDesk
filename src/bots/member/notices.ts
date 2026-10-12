@@ -97,6 +97,9 @@ export function correctDone(value: string): string {
   return `Done, I have it as "${value}" now. It takes a moment to save; check /mydata in a minute for the receipt.`;
 }
 
+export const ANSWER_WITHDRAWN = "That answer has since been withdrawn by the team, so I will not show it. Here is what I have for your question instead.";
+export const ANSWER_CHANGED = "That answer has since been changed by the team, so I will not show the version I had. Here is what I have for your question instead.";
+
 export const FEEDBACK_NOT_HELPFUL = "Thanks, I've passed your question to the team.";
 export const FEEDBACK_HELPFUL = "Good, thanks for telling me. I will keep using that answer.";
 

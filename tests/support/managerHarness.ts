@@ -31,6 +31,8 @@ export interface ManagerHarnessOptions {
   readonly modelStatus?: number;
   readonly setupCode?: string | null;
   readonly managerKeys?: readonly string[];
+  readonly cache?: LedgerCache;
+  readonly seqFrom?: number;
 }
 
 export interface ManagerHarness {
@@ -62,7 +64,7 @@ function groqFetch(options: ManagerHarnessOptions): FetchLike {
 export function managerHarness(options: ManagerHarnessOptions = {}): ManagerHarness {
   const community = new FakeMemory();
   const notesMemory = new FakeMemory();
-  const cache = new LedgerCache();
+  const cache = options.cache ?? new LedgerCache();
   const notesCache = new LedgerCache();
   const memory = new NamespaceRouter(community, new Map([[NOTES_NAMESPACE, notesMemory]]));
   const queue = new WriteQueue(memory, async () => {}, (job) => {
@@ -73,7 +75,7 @@ export function managerHarness(options: ManagerHarnessOptions = {}): ManagerHarn
   const logLines: string[] = [];
   const clock = { now: () => new Date("2026-10-08T09:00:00.000Z") };
   const directory = new MemberDirectory();
-  const pipeline = new EventPipeline(new SeqAllocator(1), (namespace) => (namespace === NOTES_NAMESPACE ? notesCache : cache), queue, COMMUNITY);
+  const pipeline = new EventPipeline(new SeqAllocator(options.seqFrom ?? 1), (namespace) => (namespace === NOTES_NAMESPACE ? notesCache : cache), queue, COMMUNITY);
   const health = new MemoryHealth();
   health.applyBoot(
     { namespaces: 0, linesRead: 0, decoded: 0, undecodable: 0, dropped: 0, partialNamespaces: [], atLimitNamespaces: [], failures: [], maxSeq: 0, nextSeq: 1, complete: true },
